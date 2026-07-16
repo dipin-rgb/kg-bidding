@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: kg-bidding
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: kg-bidding-data
+      mountPath: /var/data
+      sizeGB: 1

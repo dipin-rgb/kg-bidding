@@ -114,9 +114,13 @@ function parseToken(t) {
   return { kind: parts[0], id: Number(parts[1]) };
 }
 function getSession(req) {
-  const v = parseToken(parseCookies(req).sid);
-  if (!v) return null;
-  return { client_id: v.kind === 'c' ? v.id : null, is_admin: v.kind === 'a' ? 1 : 0 };
+  const ck = parseCookies(req);
+  const c = parseToken(ck.sid_c);
+  const a = parseToken(ck.sid_a);
+  const client_id = c && c.kind === 'c' ? c.id : null;
+  const is_admin = a && a.kind === 'a' ? 1 : 0;
+  if (!client_id && !is_admin) return null;
+  return { client_id, is_admin };
 }
 function requireClient(req, res, next) {
   const s = getSession(req);
@@ -150,7 +154,7 @@ app.post('/api/client-login', (req, res) => {
     db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, client.id);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   }
-  setCookie(res, 'sid', makeToken('c', client.id));
+  setCookie(res, 'sid_c', makeToken('c', client.id));
   res.json({ client });
 });
 
@@ -162,6 +166,9 @@ app.get('/api/me', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
+  const kind = (req.body || {}).kind;
+  if (kind !== 'a') res.append('Set-Cookie', 'sid_c=; Path=/; Max-Age=0');
+  if (kind !== 'c') res.append('Set-Cookie', 'sid_a=; Path=/; Max-Age=0');
   res.append('Set-Cookie', 'sid=; Path=/; Max-Age=0');
   res.json({ ok: true });
 });
@@ -235,7 +242,7 @@ app.delete('/api/bids/:stonePk', requireClient, (req, res) => {
 /* ---------------- admin ---------------- */
 app.post('/api/admin/login', (req, res) => {
   if (((req.body || {}).password || '') !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Wrong password.' });
-  setCookie(res, 'sid', makeToken('a'));
+  setCookie(res, 'sid_a', makeToken('a'));
   res.json({ ok: true });
 });
 

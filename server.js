@@ -96,12 +96,27 @@ function parseCookies(req) {
 function setCookie(res, name, value) {
   res.append('Set-Cookie', name + '=' + encodeURIComponent(value) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + (60 * 60 * 24 * 30));
 }
-function newToken() { return crypto.randomBytes(32).toString('hex'); }
-
+/* Stateless signed tokens - no DB row needed, so logins survive server restarts */
+const SECRET = process.env.SECRET || crypto.createHash('sha256').update('kg-bidding-' + ADMIN_PASSWORD).digest('hex');
+function signPayload(p) { return crypto.createHmac('sha256', SECRET).update(p).digest('hex'); }
+function makeToken(kind, id) {
+  const p = kind + '.' + (id || 0) + '.' + Date.now();
+  return p + '.' + signPayload(p);
+}
+function parseToken(t) {
+  if (!t) return null;
+  const parts = String(t).split('.');
+  if (parts.length !== 4) return null;
+  const p = parts.slice(0, 3).join('.');
+  if (signPayload(p) !== parts[3]) return null;
+  const ts = Number(parts[2]);
+  if (!isFinite(ts) || Date.now() - ts > 30 * 24 * 3600 * 1000) return null;
+  return { kind: parts[0], id: Number(parts[1]) };
+}
 function getSession(req) {
-  const token = parseCookies(req).sid;
-  if (!token) return null;
-  return db.prepare('SELECT * FROM sessions WHERE token = ?').get(token) || null;
+  const v = parseToken(parseCookies(req).sid);
+  if (!v) return null;
+  return { client_id: v.kind === 'c' ? v.id : null, is_admin: v.kind === 'a' ? 1 : 0 };
 }
 function requireClient(req, res, next) {
   const s = getSession(req);
@@ -135,9 +150,7 @@ app.post('/api/client-login', (req, res) => {
     db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, client.id);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   }
-  const token = newToken();
-  db.prepare('INSERT INTO sessions (token, client_id, is_admin, created_at) VALUES (?,?,0,?)').run(token, client.id, Date.now());
-  setCookie(res, 'sid', token);
+  setCookie(res, 'sid', makeToken('c', client.id));
   res.json({ client });
 });
 
@@ -149,8 +162,6 @@ app.get('/api/me', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  const token = parseCookies(req).sid;
-  if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   res.append('Set-Cookie', 'sid=; Path=/; Max-Age=0');
   res.json({ ok: true });
 });
@@ -224,9 +235,7 @@ app.delete('/api/bids/:stonePk', requireClient, (req, res) => {
 /* ---------------- admin ---------------- */
 app.post('/api/admin/login', (req, res) => {
   if (((req.body || {}).password || '') !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Wrong password.' });
-  const token = newToken();
-  db.prepare('INSERT INTO sessions (token, client_id, is_admin, created_at) VALUES (?, NULL, 1, ?)').run(token, Date.now());
-  setCookie(res, 'sid', token);
+  setCookie(res, 'sid', makeToken('a'));
   res.json({ ok: true });
 });
 
@@ -409,6 +418,51 @@ app.get('/api/admin/clients', requireAdmin, (req, res) => {
     'SELECT c.*, (SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids ' +
     'FROM clients c ORDER BY c.created_at DESC').all();
   res.json({ clients });
+});
+
+/* ---------------- client: download own bids as Excel ---------------- */
+app.get('/api/my-bids/export', requireClient, async (req, res) => {
+  const ev = activeEvent();
+  if (!ev) return res.status(400).json({ error: 'No live event.' });
+  const rows = db.prepare(
+    'SELECT b.*, s.stone_id, s.shape, s.cts, s.color, s.clarity, s.cut, s.pol, s.symm, s.fluor, ' +
+    's.measurements, s.rap, s.disc AS adisc, s.price_ct AS act, s.lab, s.report_no ' +
+    'FROM bids b JOIN stones s ON s.id = b.stone_pk ' +
+    'WHERE b.event_id = ? AND b.client_id = ? ORDER BY s.cts DESC').all(ev.id, req.client.id);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('My Bids');
+  ws.columns = [
+    { header: 'Stone ID', key: 'sid', width: 14 }, { header: 'Shape', key: 'sh', width: 9 },
+    { header: 'Cts', key: 'cts', width: 8 }, { header: 'Col', key: 'col', width: 6 },
+    { header: 'Cla', key: 'cla', width: 7 }, { header: 'Cut/Pol/Sym', key: 'cps', width: 12 },
+    { header: 'Fluor', key: 'flo', width: 9 }, { header: 'Measurements', key: 'meas', width: 16 },
+    { header: 'Lab', key: 'lab', width: 7 }, { header: 'Report No.', key: 'rep', width: 14 },
+    { header: 'Rap', key: 'rap', width: 10 }, { header: 'Ask Disc%', key: 'ad', width: 10 },
+    { header: 'Ask $/Ct', key: 'ac', width: 10 }, { header: 'My Bid Disc%', key: 'bd', width: 12 },
+    { header: 'My Bid $/Ct', key: 'bp', width: 11 }, { header: 'My Bid Amount $', key: 'ba', width: 14 },
+    { header: 'Placed / Updated', key: 'ts', width: 22 }
+  ];
+  let total = 0;
+  for (const r of rows) {
+    total += r.bid_amount;
+    ws.addRow({
+      sid: r.stone_id, sh: r.shape, cts: r.cts, col: r.color, cla: r.clarity,
+      cps: [r.cut, r.pol, r.symm].filter(Boolean).join('-'), flo: r.fluor, meas: r.measurements,
+      lab: r.lab, rep: r.report_no, rap: r.rap, ad: r.adisc, ac: r.act,
+      bd: r.bid_disc, bp: r.bid_per_ct, ba: r.bid_amount,
+      ts: new Date(r.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+    });
+  }
+  const tr = ws.addRow({ sid: 'TOTAL', ba: round2(total) });
+  tr.font = { bold: true };
+  ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10A6C2' } };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  const fname = 'MyBids_' + ev.name.replace(/[^a-zA-Z0-9-_]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 /* ---------------- Excel export ---------------- */

@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS bids (
   UNIQUE(stone_pk, client_id)
 );
 `);
+try { db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT'); } catch (e) { /* column already exists */ }
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -134,26 +135,49 @@ function requireAdmin(req, res, next) {
   if (!s || !s.is_admin) return res.status(401).json({ error: 'Admin login required' });
   next();
 }
+function hashPw(pw) {
+  const salt = crypto.randomBytes(8).toString('hex');
+  return salt + ':' + crypto.scryptSync(String(pw), salt, 32).toString('hex');
+}
+function verifyPw(pw, stored) {
+  if (!stored) return false;
+  const parts = String(stored).split(':');
+  if (parts.length !== 2) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(parts[1], 'hex'), crypto.scryptSync(String(pw), parts[0], 32)); }
+  catch (e) { return false; }
+}
 const round2 = n => Math.round(n * 100) / 100;
 
 /* ---------------- client auth ---------------- */
 app.post('/api/client-login', (req, res) => {
-  let { name, company, contact } = req.body || {};
+  let { name, company, contact, password } = req.body || {};
   name = (name || '').trim();
   company = (company || '').trim();
   contact = (contact || '').trim().toLowerCase();
+  password = String(password || '');
   if (!name || !company || !contact) return res.status(400).json({ error: 'Name, company and email/mobile are all required.' });
   if (contact.length < 5) return res.status(400).json({ error: 'Please enter a valid email or mobile number.' });
+  if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
 
   let client = db.prepare('SELECT * FROM clients WHERE contact = ?').get(contact);
   if (!client) {
-    const info = db.prepare('INSERT INTO clients (name, company, contact, created_at) VALUES (?,?,?,?)')
-      .run(name, company, contact, Date.now());
+    /* first visit: account is created with this password */
+    const info = db.prepare('INSERT INTO clients (name, company, contact, created_at, password_hash) VALUES (?,?,?,?,?)')
+      .run(name, company, contact, Date.now(), hashPw(password));
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(info.lastInsertRowid));
+  } else if (!client.password_hash) {
+    /* existing account from before passwords existed (or admin reset): adopt this password */
+    db.prepare('UPDATE clients SET name = ?, company = ?, password_hash = ? WHERE id = ?')
+      .run(name, company, hashPw(password), client.id);
+    client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   } else {
+    if (!verifyPw(password, client.password_hash)) {
+      return res.status(401).json({ error: 'Wrong password for this email/mobile. If you forgot it, contact K.Girdharlal to reset.' });
+    }
     db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, client.id);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   }
+  delete client.password_hash;
   setCookie(res, 'sid_c', makeToken('c', client.id));
   res.json({ client });
 });
@@ -427,6 +451,97 @@ app.get('/api/admin/clients', requireAdmin, (req, res) => {
   res.json({ clients });
 });
 
+/* ---------------- admin: full database backup ---------------- */
+app.get('/api/admin/backup', requireAdmin, (req, res) => {
+  const tmp = path.join(DATA_DIR, 'backup-tmp-' + Date.now() + '.db');
+  try {
+    db.exec("VACUUM INTO '" + tmp.replace(/'/g, "''") + "'");
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="kg-bidding-backup-' + new Date().toISOString().slice(0, 10) + '.db"');
+    const stream = fs.createReadStream(tmp);
+    stream.pipe(res);
+    stream.on('close', () => fs.unlink(tmp, () => {}));
+    stream.on('error', () => { fs.unlink(tmp, () => {}); res.end(); });
+  } catch (e) {
+    fs.unlink(tmp, () => {});
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ---------------- admin: reset a client's password ---------------- */
+app.post('/api/admin/clients/:id/reset-password', requireAdmin, (req, res) => {
+  db.prepare('UPDATE clients SET password_hash = NULL WHERE id = ?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+/* ---------------- admin: stones with no bids ---------------- */
+app.get('/api/admin/events/:id/nobids', requireAdmin, (req, res) => {
+  const stones = db.prepare(
+    'SELECT s.* FROM stones s WHERE s.event_id = ? AND NOT EXISTS ' +
+    '(SELECT 1 FROM bids b WHERE b.stone_pk = s.id) ORDER BY s.cts DESC').all(Number(req.params.id));
+  res.json({ stones });
+});
+
+/* ---------------- admin: email each bidder their bid summary ---------------- */
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'K.Girdharlal Bidding <onboarding@resend.dev>';
+function bidEmailHtml(clientName, evName, terms, rows, total) {
+  const fmtN = n => n == null ? '-' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const tr = rows.map(r =>
+    '<tr>' +
+    '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee;font-weight:600">' + r.stone_id + '</td>' +
+    '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee">' + (r.shape || '') + ' ' + fmtN(r.cts) + 'ct ' + (r.color || '') + ' ' + (r.clarity || '') + '</td>' +
+    '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee;text-align:right">' + (r.bid_disc == null ? '-' : fmtN(r.bid_disc) + '%') + '</td>' +
+    '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee;text-align:right">$' + fmtN(r.bid_per_ct) + '</td>' +
+    '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee;text-align:right;font-weight:700">$' + fmtN(r.bid_amount) + '</td>' +
+    '</tr>').join('');
+  return '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;color:#1b2437">' +
+    '<div style="background:#10A6C2;color:#fff;padding:18px 24px;border-radius:12px 12px 0 0">' +
+    '<div style="font-size:18px;font-weight:700;letter-spacing:2px">K.GIRDHARLAL</div>' +
+    '<div style="font-size:12px;opacity:.9">THERE\'S MORE TO MAKING DIAMONDS</div></div>' +
+    '<div style="border:1px solid #e3eaee;border-top:none;padding:24px;border-radius:0 0 12px 12px">' +
+    '<p>Dear ' + clientName + ',</p>' +
+    '<p>Thank you for participating in <b>' + evName + '</b>. Below is a summary of the bids you placed:</p>' +
+    '<table style="border-collapse:collapse;width:100%;font-size:13px">' +
+    '<tr style="background:#E6F6FA;color:#0b7d95"><th style="padding:8px 10px;text-align:left">Stone ID</th><th style="padding:8px 10px;text-align:left">Details</th><th style="padding:8px 10px;text-align:right">Bid Disc%</th><th style="padding:8px 10px;text-align:right">Bid $/Ct</th><th style="padding:8px 10px;text-align:right">Amount</th></tr>' +
+    tr +
+    '<tr><td colspan="4" style="padding:10px;text-align:right;font-weight:700">TOTAL</td><td style="padding:10px;text-align:right;font-weight:700;color:#10A6C2">$' + fmtN(total) + '</td></tr>' +
+    '</table>' +
+    (terms ? '<p style="font-size:12px;color:#66788a">Terms: ' + terms + '</p>' : '') +
+    '<p style="font-size:12px;color:#66788a">All bids are firm and binding as per the bidding terms accepted on the portal. K.Girdharlal reserves the right to accept or reject any bid at its sole discretion. This is an automated summary; please do not reply to this email.</p>' +
+    '</div></div>';
+}
+app.post('/api/admin/events/:id/email-bids', requireAdmin, async (req, res) => {
+  if (!RESEND_API_KEY) return res.status(400).json({ error: 'Email service not configured yet. Add RESEND_API_KEY (and optionally FROM_EMAIL) in Render Environment.' });
+  const ev = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
+  if (!ev) return res.status(404).json({ error: 'Event not found.' });
+  const clients = db.prepare(
+    'SELECT DISTINCT c.* FROM bids b JOIN clients c ON c.id = b.client_id WHERE b.event_id = ?').all(ev.id);
+  const perClient = db.prepare(
+    'SELECT b.*, s.stone_id, s.shape, s.cts, s.color, s.clarity FROM bids b JOIN stones s ON s.id = b.stone_pk ' +
+    'WHERE b.event_id = ? AND b.client_id = ? ORDER BY s.cts DESC');
+  let sent = 0, skipped = 0, failed = 0;
+  for (const c of clients) {
+    if (!c.contact || c.contact.indexOf('@') === -1) { skipped++; continue; }
+    const rows = perClient.all(ev.id, c.id);
+    const total = rows.reduce((a, r) => a + r.bid_amount, 0);
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [c.contact],
+          subject: 'Your bid summary - ' + ev.name + ' | K.Girdharlal',
+          html: bidEmailHtml(c.name, ev.name, ev.terms, rows, round2(total))
+        })
+      });
+      if (r.ok) sent++; else failed++;
+    } catch (e) { failed++; }
+  }
+  res.json({ ok: true, sent, skipped, failed, note: skipped ? skipped + ' bidder(s) registered with a mobile number instead of email and could not be emailed.' : undefined });
+});
+
 /* ---------------- client: download own bids as Excel ---------------- */
 app.get('/api/my-bids/export', requireClient, async (req, res) => {
   const ev = activeEvent();
@@ -540,10 +655,30 @@ app.get('/api/admin/events/:id/export', requireAdmin, async (req, res) => {
   }
   headerStyle(flat);
 
+  /* Sheet 3: stones that received no bids */
+  const nb = wb.addWorksheet('No Bids');
+  nb.columns = [
+    { header: 'Stone ID', key: 'sid', width: 14 }, { header: 'Shape', key: 'sh', width: 9 },
+    { header: 'Cts', key: 'cts', width: 8 }, { header: 'Col', key: 'col', width: 6 },
+    { header: 'Cla', key: 'cla', width: 7 }, { header: 'Cut/Pol/Sym', key: 'cps', width: 12 },
+    { header: 'Fluor', key: 'flo', width: 9 }, { header: 'Rap', key: 'rap', width: 10 },
+    { header: 'Ask Disc%', key: 'ad', width: 10 }, { header: 'Ask $/Ct', key: 'ac', width: 10 },
+    { header: 'Ask Amt $', key: 'aa', width: 12 }, { header: 'Lab', key: 'lab', width: 7 }
+  ];
+  for (const s of stones) {
+    if (bidsByStone[s.id]) continue;
+    nb.addRow({
+      sid: s.stone_id, sh: s.shape, cts: s.cts, col: s.color, cla: s.clarity,
+      cps: [s.cut, s.pol, s.symm].filter(Boolean).join('-'), flo: s.fluor,
+      rap: s.rap, ad: s.disc, ac: s.price_ct, aa: s.amount, lab: s.lab
+    });
+  }
+  headerStyle(nb);
+
   /* One sheet per client */
   const clients = db.prepare(
     'SELECT DISTINCT c.* FROM bids b JOIN clients c ON c.id = b.client_id WHERE b.event_id = ?').all(ev.id);
-  const usedNames = new Set(['Stone Comparison', 'All Bids']);
+  const usedNames = new Set(['Stone Comparison', 'All Bids', 'No Bids']);
   const perClient = db.prepare(
     'SELECT b.*, s.stone_id, s.shape, s.cts, s.color, s.clarity, s.rap, s.disc AS adisc, s.price_ct AS act ' +
     'FROM bids b JOIN stones s ON s.id = b.stone_pk ' +

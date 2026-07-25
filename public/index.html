@@ -3,519 +3,663 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>K.GIRDHARLAL — Bidding</title>
+<title>K.GIRDHARLAL — The Bidding Portal</title>
+<meta name="description" content="A private bidding portal for K.Girdharlal's trade partners. New inventory uploaded regularly — curated for real buyer demand, never clearance.">
+<meta name="theme-color" content="#eef4f7">
+<meta property="og:type" content="website">
+<meta property="og:title" content="K.GIRDHARLAL — The Bidding Portal">
+<meta property="og:description" content="New inventory uploaded regularly. Curated for real buyer demand, never clearance. Bidding access for registered trade partners.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M26.4 4 L26.4 46 L4 46 C17 41 25 25 26.4 4 Z' fill='%2310A6C2'/%3E%3Cpath d='M29.6 4 L29.6 46 L52 46 C39 41 31 25 29.6 4 Z' fill='%2310A6C2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --teal:#10A6C2; --teal-d:#0C87A0; --teal-bg:#E6F6FA;
-  --ink:#1b2437; --bg:#f7fafb; --card:#fff; --line:#e3eaee; --mut:#66788a;
-  --green:#188a52; --red:#d13438; --amber:#b7791f;
+  /* pastel paper tones */
+  --paper:#eef4f7;
+  --paper-2:#dceaf0;
+  --paper-3:#f4ebde;
+  --paper-4:#e3eff4;
+  --paper-5:#cfe3ec;
+  /* ink */
+  --ink:#1d2b35;
+  --mut:#42545f;
+  --mut-2:#586b79;
+  /* brand */
+  --teal:#10A6C2;
+  --teal-d:#0a7488;
+  --teal-deep:#075f72;
+  --teal-pale:#b9dde8;
+  --teal-mist:#d3e9f0;
+  --sand:#e0cbac;
+  --hair:rgba(29,43,53,.14);
+  --hair-2:rgba(29,43,53,.09);
+  --display:'Cormorant Garamond',Georgia,serif;
+  --sans:'Jost','Segoe UI',-apple-system,sans-serif;
+  --ease:cubic-bezier(.16,.84,.28,1);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font:14px/1.45 'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}
-button{font:inherit;cursor:pointer;border:none;border-radius:999px}
-input,select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:8px 12px;outline:none;background:#fff}
-input:focus,select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(16,166,194,.14)}
-.hidden{display:none!important}
-.logo-svg{display:block}
+html{scroll-behavior:smooth;background:var(--paper);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{font-family:var(--sans);font-weight:300;color:var(--ink);background:var(--paper);line-height:1.62;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+img,svg{display:block}
+svg.logo{width:188px;height:auto}
+.container{max-width:1240px;margin:0 auto;padding:0 clamp(22px,5vw,72px)}
 
-/* ---------- login ---------- */
-#loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#f2fafc 0%,#e6f4f8 60%,#d8eef4 100%)}
-.login-card{background:#fff;border-radius:18px;padding:40px 38px;width:410px;max-width:92vw;box-shadow:0 18px 50px rgba(12,60,80,.14);border:1px solid var(--line)}
-.login-card .lg{margin:0 auto 20px;display:flex;justify-content:center}
-.login-card h1{font-size:17px;color:var(--ink);text-align:center;font-weight:600;margin-bottom:4px}
-.login-card .sub{color:var(--mut);font-size:13px;margin-bottom:20px;text-align:center}
-.login-card label{display:block;font-size:11.5px;font-weight:600;color:var(--mut);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.6px}
-.login-card input{width:100%}
-.login-card .btn-main{width:100%;margin-top:24px}
-.err{color:var(--red);font-size:13px;margin-top:12px;min-height:18px}
+/* focus visibility for keyboard users */
+a:focus-visible,button:focus-visible{outline:2px solid var(--teal-d);outline-offset:5px;border-radius:2px}
+body.cur-on a:focus-visible{cursor:auto}
 
-.btn-main{background:var(--teal);color:#fff;padding:11px 22px;font-weight:600;transition:.15s}
-.btn-main:hover{background:var(--teal-d)}
-.btn-main:disabled{opacity:.5;cursor:not-allowed}
-.btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);padding:9px 18px;font-weight:600}
-.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
-.btn-sm{padding:7px 15px;font-size:13px}
+/* ---------- paper grain ---------- */
+.grain{position:fixed;inset:-50%;z-index:200;pointer-events:none;opacity:.032;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grainShift 8s steps(6) infinite}
+@keyframes grainShift{
+  0%{transform:translate(0,0)}16%{transform:translate(-2%,-3%)}33%{transform:translate(-4%,2%)}
+  50%{transform:translate(2%,-4%)}66%{transform:translate(-3%,3%)}83%{transform:translate(3%,1%)}100%{transform:translate(0,0)}}
 
-/* ---------- app shell ---------- */
-header.app{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:0 20px;height:60px;box-shadow:0 1px 6px rgba(20,60,80,.05)}
-header.app .evname{font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line);padding-left:16px}
-.countdown{margin-left:auto;background:var(--teal-bg);border:1px solid #c4e8f1;color:#0b7d95;padding:7px 16px;border-radius:999px;font-weight:700;font-size:13px;white-space:nowrap}
-.countdown b{font-variant-numeric:tabular-nums;color:#086377}
-.countdown.over{background:#fdecea;border-color:#f5c6c4;color:var(--red)}
-.countdown.over b{color:var(--red)}
-.userchip{font-size:13px;color:var(--mut);white-space:nowrap}
-.userchip b{color:var(--ink)}
+/* ---------- preloader ---------- */
+#pre{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;transition:opacity 1s var(--ease),visibility 1s;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 42%,rgba(255,255,255,.9) 0%,transparent 62%),
+    radial-gradient(ellipse 50% 40% at 88% 88%,rgba(224,203,172,.3) 0%,transparent 60%),
+    linear-gradient(170deg,#eaf2f6 0%,var(--paper) 40%,var(--paper-5) 100%)}
+#pre.done{opacity:0;visibility:hidden}
+#pre .pl{width:min(260px,64vw);opacity:0;animation:plIn 1.1s var(--ease) .1s forwards}
+#pre .bar{width:min(260px,64vw);height:1px;background:var(--teal-pale);overflow:hidden}
+#pre .bar i{display:block;height:100%;width:0;background:var(--teal);animation:plBar 1.35s var(--ease) .3s forwards}
+@keyframes plIn{to{opacity:1}}
+@keyframes plBar{to{width:100%}}
 
-/* ---------- toolbar ---------- */
-.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 20px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:60px;z-index:30}
-.toolbar input[type=search]{width:230px;border-radius:999px}
-.toolbar select{border-radius:999px}
-.tabs{display:flex;background:var(--bg);border-radius:999px;padding:3px;border:1px solid var(--line)}
-.tabs button{background:transparent;padding:7px 18px;font-weight:600;color:var(--mut)}
-.tabs button.on{background:var(--teal);color:#fff}
-.count-pill{background:var(--teal-bg);border:1px solid #c4e8f1;border-radius:999px;padding:5px 14px;font-size:12.5px;color:#0b7d95;font-weight:600}
-.toolbar .spacer{flex:1}
-.btn-excel{background:#fff;border:1.5px solid var(--green);color:var(--green);padding:8px 16px;font-weight:600;font-size:13px}
-.btn-excel:hover{background:#e7f6ee}
+/* ---------- custom cursor ---------- */
+.cur,.cur-r{position:fixed;top:0;left:0;z-index:250;pointer-events:none;border-radius:50%;opacity:0;transition:opacity .4s}
+.cur{width:5px;height:5px;background:var(--teal);margin:-2.5px 0 0 -2.5px}
+.cur-r{width:34px;height:34px;border:1px solid rgba(16,166,194,.45);margin:-17px 0 0 -17px;transition:opacity .4s,width .35s var(--ease),height .35s var(--ease),border-color .35s,margin .35s var(--ease),background .35s}
+.cur-r.big{width:66px;height:66px;margin:-33px 0 0 -33px;border-color:rgba(16,166,194,.8);background:rgba(16,166,194,.06)}
+body.cur-on .cur,body.cur-on .cur-r{opacity:1}
+@media (hover:hover) and (pointer:fine){body.cur-on,body.cur-on a,body.cur-on button{cursor:none}}
+@media (hover:none){.cur,.cur-r{display:none}}
 
-/* ---------- table ---------- */
-.wrap{padding:16px 20px 120px}
-.tbl-card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:auto;box-shadow:0 1px 5px rgba(20,60,80,.05)}
-table{border-collapse:collapse;width:100%;min-width:1200px}
-thead th{background:#f4fafc;color:#4a6472;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;padding:11px 10px;text-align:left;border-bottom:2px solid #d8ecf2;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
-thead th.nosort{cursor:default}
-thead th .arr{color:var(--teal);font-size:10px}
-tbody td{padding:11px 10px;border-bottom:1px solid #eef4f6;white-space:nowrap;font-variant-numeric:tabular-nums}
-tbody tr:hover{background:#f2fafc}
-tbody tr.hasbid{background:#f2fbf6}
-tbody tr.hasbid:hover{background:#e9f7ef}
-.sid{color:var(--teal);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-.disc-red{color:var(--red);font-weight:600}
-.pricect{color:var(--amber);font-weight:700}
-.mybid{color:var(--green);font-weight:700}
-.lab-tag{background:var(--teal-bg);border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:700;color:#0b7d95}
-.bid-btn{background:var(--teal);color:#fff;padding:7px 18px;font-weight:600;font-size:13px}
-.bid-btn:hover{background:var(--teal-d)}
-.bid-btn.edit{background:var(--green)}
-.del-bid{background:#fdecea;color:var(--red);font-size:11.5px;font-weight:700;margin-left:8px;padding:4px 10px;border:1px solid #f5c6c4}
-.del-bid:hover{background:var(--red);color:#fff}
+/* ---------- scroll progress ---------- */
+.prog{position:fixed;top:0;left:0;height:2px;width:0;background:linear-gradient(90deg,var(--teal),var(--sand));z-index:210}
 
-/* ---------- bottom bar ---------- */
-.bottombar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 18px rgba(20,60,80,.07);display:flex;align-items:center;gap:22px;padding:12px 22px;z-index:35;flex-wrap:wrap}
-.stat{text-align:center}
-.stat .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
-.stat .v{font-weight:700;font-size:15px;color:var(--ink)}
-.bottombar .spacer{flex:1}
-.terms{font-size:12px;color:var(--mut);max-width:340px}
+/* ---------- nav ---------- */
+.nav{position:fixed;top:0;left:0;right:0;z-index:150;transition:background .5s,backdrop-filter .5s,border-color .5s,box-shadow .5s;border-bottom:1px solid transparent}
+.nav.stuck{background:rgba(238,244,247,.8);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom-color:var(--hair-2);box-shadow:0 8px 34px rgba(29,43,53,.08)}
+.nav .container{display:flex;align-items:center;justify-content:space-between;height:92px;transition:height .5s var(--ease)}
+.nav.stuck .container{height:72px}
+.nav .lk{position:relative;font-size:12px;font-weight:400;letter-spacing:2.4px;text-transform:uppercase;color:var(--ink);padding:6px 0;transition:color .4s}
+.nav .lk::after{content:'';position:absolute;left:0;bottom:0;width:0;height:1px;background:var(--teal);transition:width .45s var(--ease)}
+.nav .lk:hover::after{width:100%}
+.nav .lk:hover{color:var(--teal-d)}
 
-/* ---------- modals ---------- */
-.overlay{position:fixed;inset:0;background:rgba:10,40,55,.5;background:rgba(10,40,55,.5);z-index:60;display:flex;align-items:center;justify-content:center;padding:18px}
-.modal{background:#fff;border-radius:16px;max-width:1060px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,20,30,.35)}
-.modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line)}
-.modal-h h2{font-size:17px;color:var(--ink)}
-.modal-x{background:none;font-size:22px;color:var(--mut);line-height:1}
-.modal-b{padding:18px 22px;overflow:auto}
-.modal-f{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;align-items:center}
-.bid-note{font-size:12.5px;color:#0b7d95;background:var(--teal-bg);border:1px solid #c4e8f1;border-radius:10px;padding:10px 14px;margin-bottom:14px}
-table.bidtbl{min-width:860px}
-table.bidtbl input{width:96px;padding:7px 9px;text-align:right;border-radius:8px}
-table.bidtbl td{padding:9px 8px}
-.amt-cell{font-weight:700;color:var(--ink)}
-.modal .err{margin:0 auto 0 0}
+/* ---------- shared type ---------- */
+.eyebrow{font-size:11.5px;font-weight:400;letter-spacing:3.4px;text-transform:uppercase;color:var(--teal-d);display:flex;align-items:center;flex-wrap:wrap;gap:14px}
+.eyebrow::before{content:'';width:36px;height:1px;background:var(--teal-pale);flex:none}
+.eyebrow.mid{justify-content:center}
+.eyebrow.mid::after{content:'';width:36px;height:1px;background:var(--teal-pale);flex:none}
+.disp{font-family:var(--display);font-weight:300;letter-spacing:-.005em;line-height:1.08;color:var(--ink)}
+h1.disp{font-size:clamp(46px,8.8vw,112px)}
+h2.disp{font-size:clamp(35px,5.4vw,68px)}
+.lead{font-family:var(--display);font-style:italic;font-weight:400;font-size:clamp(21px,2.5vw,32px);color:var(--teal-d);line-height:1.42}
 
-/* stone detail */
-.detail-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
-.detail-grid iframe{width:100%;height:480px;border:1px solid var(--line);border-radius:12px;background:#f4fafc}
-.spec-list{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:13px;align-content:start}
-.spec-list .k{color:var(--mut)}
-.spec-list .row{display:contents}
-.spec-list .row div{padding:5px 0;border-bottom:1px solid #eef4f6}
-.link-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-@media(max-width:900px){.detail-grid{grid-template-columns:1fr}.detail-grid iframe{height:340px}}
+/* ---------- inventory badge ---------- */
+.badge{display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:var(--teal-deep);
+  background:rgba(255,255,255,.7);border:1px solid var(--teal-pale);border-radius:999px;padding:10px 22px;
+  box-shadow:0 2px 14px rgba(29,43,53,.05)}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);flex:none;animation:blip 2.4s ease-in-out infinite}
+@keyframes blip{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(16,166,194,.45)}50%{opacity:.55;box-shadow:0 0 0 7px rgba(16,166,194,0)}}
 
-.toast{position:fixed;top:76px;right:20px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:12px;z-index:80;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.3);animation:fadein .2s}
-.toast.ok{background:var(--green)} .toast.bad{background:var(--red)}
-@keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
-.empty{padding:60px 20px;text-align:center;color:var(--mut)}
-.closed-banner{background:#fdecea;color:var(--red);border-bottom:1px solid #f5c6c4;padding:10px 20px;text-align:center;font-weight:600}
+/* ---------- buttons ---------- */
+.btn{position:relative;display:inline-flex;align-items:center;gap:12px;font-size:12px;font-weight:400;letter-spacing:2.5px;text-transform:uppercase;padding:20px 42px;overflow:hidden;border:1px solid var(--teal);color:var(--teal-deep);transition:color .5s,border-color .5s}
+.btn span{position:relative;z-index:2}
+.btn .ar{position:relative;z-index:2;font-style:normal;transition:transform .5s var(--ease)}
+.btn::before{content:'';position:absolute;inset:0;background:var(--teal-d);transform:translateY(101%);transition:transform .6s var(--ease);z-index:1}
+.btn:hover{color:#fff;border-color:var(--teal-d)}
+.btn:hover::before{transform:translateY(0)}
+.btn:hover .ar{transform:translateX(6px)}
+.btn.ghost{border-color:var(--hair);color:var(--ink)}
+.btn.ghost::before{background:var(--ink)}
+.btn.ghost:hover{color:var(--paper);border-color:var(--ink)}
+.link-u{position:relative;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:var(--teal-d);padding-bottom:6px}
+.link-u::after{content:'';position:absolute;left:0;bottom:0;width:100%;height:1px;background:var(--teal-pale)}
+.link-u::before{content:'';position:absolute;left:0;bottom:0;width:0;height:1px;background:var(--teal);transition:width .5s var(--ease);z-index:2}
+.link-u:hover::before{width:100%}
+
+/* ---------- reveal engine ---------- */
+.rv{opacity:0;transform:translateY(30px);transition:opacity 1.1s var(--ease),transform 1.1s var(--ease)}
+.rv.in{opacity:1;transform:none}
+.rv-b{opacity:0;filter:blur(9px);transform:translateY(22px);transition:opacity 1.3s var(--ease),filter 1.3s var(--ease),transform 1.3s var(--ease)}
+.rv-b.in{opacity:1;filter:blur(0);transform:none}
+/* vertical padding keeps descenders (g j p q y) from being clipped by the mask */
+.w{display:inline-block;overflow:hidden;vertical-align:top;padding:.1em 0 .2em;margin:-.1em 0 -.2em;
+  transition:transform .55s var(--ease),color .55s var(--ease),opacity .55s var(--ease)}
+.w i{display:inline-block;font-style:inherit;transform:translateY(140%);transition:transform 1.05s var(--ease)}
+.split.in .w i{transform:translateY(0)}
+
+/* ---------- header word hover ---------- */
+@media (hover:hover) and (pointer:fine){
+  .split.in:hover .w{opacity:.4}
+  .split.in .w:hover{opacity:1;color:var(--teal-d);transform:translateY(-8px)}
+}
+
+/* ---------- hero ---------- */
+.hero{position:relative;min-height:100vh;min-height:100svh;display:flex;align-items:center;overflow:hidden;padding:130px 0 90px;
+  background:
+    radial-gradient(ellipse 68% 48% at 20% 10%,rgba(255,255,255,.88) 0%,transparent 56%),
+    radial-gradient(ellipse 58% 52% at 84% 20%,rgba(185,221,232,.5) 0%,transparent 60%),
+    radial-gradient(ellipse 46% 40% at 90% 84%,rgba(224,203,172,.36) 0%,transparent 58%),
+    radial-gradient(ellipse 82% 58% at 46% 106%,rgba(16,166,194,.15) 0%,transparent 62%),
+    linear-gradient(164deg,#e9f2f6 0%,var(--paper) 26%,#dfeef4 58%,var(--paper-5) 100%)}
+.hero-glow{position:absolute;top:48%;left:50%;width:min(1200px,155vw);aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;
+  background:radial-gradient(circle,rgba(255,255,255,.52) 0%,rgba(16,166,194,.15) 30%,rgba(224,203,172,.19) 50%,transparent 70%);
+  animation:breathe 11s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.8;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}}
+.dia-wrap{position:absolute;top:50%;left:50%;width:min(740px,110vw);aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;will-change:transform}
+.dia{width:100%;height:100%;animation:turn 130s linear infinite}
+@keyframes turn{to{transform:rotate(360deg)}}
+.hero-inner{position:relative;z-index:3;width:100%;text-align:center;will-change:transform,opacity}
+.hero .badge{margin-bottom:26px}
+.hero .eyebrow{margin-bottom:clamp(22px,3.4vw,34px)}
+.hero h1{margin-bottom:26px}
+.hero .lead{margin:0 auto 46px;max-width:680px}
+.hero .lead b{font-style:normal;font-weight:400;color:var(--ink)}
+.hero .ctas{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:34px}
+.hero .fine{font-size:11.5px;letter-spacing:2.2px;text-transform:uppercase;color:var(--mut-2)}
+.scroll-cue{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:4;display:flex;flex-direction:column;align-items:center;gap:12px}
+.scroll-cue span{font-size:10px;letter-spacing:2.8px;text-transform:uppercase;color:var(--mut-2)}
+.scroll-cue .ln{width:1px;height:56px;background:linear-gradient(180deg,var(--teal),transparent);position:relative;overflow:hidden}
+.scroll-cue .ln::after{content:'';position:absolute;top:-56px;left:0;width:1px;height:56px;background:var(--teal-deep);animation:drop 2.6s var(--ease) infinite}
+@keyframes drop{0%{top:-56px}60%,100%{top:56px}}
+
+/* ---------- marquee ---------- */
+.mq{border-top:1px solid var(--hair-2);border-bottom:1px solid var(--hair-2);padding:28px 0;overflow:hidden;position:relative;
+  background:linear-gradient(90deg,#c9dfe9 0%,var(--paper-2) 26%,#e9f3f6 50%,var(--paper-2) 74%,#c9dfe9 100%)}
+.mq::before,.mq::after{content:'';position:absolute;top:0;bottom:0;width:16vw;z-index:2;pointer-events:none}
+.mq::before{left:0;background:linear-gradient(90deg,#c9dfe9,transparent)}
+.mq::after{right:0;background:linear-gradient(270deg,#c9dfe9,transparent)}
+.mq-track{display:flex;width:max-content;animation:slide 46s linear infinite}
+.mq-track>div{display:flex;align-items:center}
+.mq-track em{font-family:var(--display);font-style:italic;font-size:clamp(18px,2.2vw,27px);color:var(--ink);padding:0 32px;white-space:nowrap;opacity:.82}
+.mq-track b{color:var(--teal);font-size:9px;line-height:1;font-weight:400}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+/* ---------- manifesto ---------- */
+.mani{padding:clamp(96px,15vh,190px) 0;text-align:center;position:relative;overflow:hidden;
+  background:
+    radial-gradient(ellipse 62% 44% at 50% -2%,rgba(255,255,255,.92) 0%,transparent 60%),
+    radial-gradient(ellipse 48% 40% at 10% 86%,rgba(224,203,172,.3) 0%,transparent 62%),
+    radial-gradient(ellipse 44% 38% at 92% 24%,rgba(185,221,232,.42) 0%,transparent 60%),
+    linear-gradient(180deg,var(--paper-5) 0%,#e9f1f4 20%,var(--paper) 46%,#f1efe7 76%,var(--paper-3) 100%)}
+.mani .container{position:relative;z-index:2}
+.mani .eyebrow{margin-bottom:clamp(34px,5vw,52px)}
+.mani blockquote{font-family:var(--display);font-weight:300;font-size:clamp(26px,3.7vw,50px);line-height:1.3;max-width:980px;margin:0 auto;color:var(--ink)}
+.mani blockquote em{font-style:italic;color:var(--teal-d)}
+
+/* ---------- editorial panels ---------- */
+.panels{padding:clamp(88px,12vh,150px) 0;position:relative;
+  background:
+    radial-gradient(ellipse 52% 42% at 86% 6%,rgba(255,255,255,.78) 0%,transparent 58%),
+    radial-gradient(ellipse 58% 48% at 8% 90%,rgba(185,221,232,.4) 0%,transparent 60%),
+    linear-gradient(172deg,var(--paper-3) 0%,#f1e5d4 38%,#ebdfcb 64%,#f6efe4 100%)}
+.panels .head{margin-bottom:clamp(52px,7vw,88px)}
+.panels .head .eyebrow{margin-bottom:22px}
+.pn{display:grid;grid-template-columns:96px 1fr 1fr;gap:clamp(24px,5vw,64px);align-items:start;padding:clamp(38px,5vw,58px) 0;border-top:1px solid var(--hair-2);transition:background .6s}
+.pn:last-child{border-bottom:1px solid var(--hair-2)}
+.pn:hover{background:rgba(255,255,255,.42)}
+.pn .idx{font-family:var(--display);font-size:clamp(32px,4.2vw,56px);font-weight:300;color:var(--teal);line-height:.9;opacity:.5;transition:opacity .6s,transform .6s var(--ease)}
+.pn:hover .idx{opacity:1;transform:translateY(-4px)}
+.pn h3{font-family:var(--display);font-weight:400;font-size:clamp(24px,2.9vw,37px);line-height:1.16;color:var(--ink)}
+.pn p{font-size:16.5px;color:var(--mut);line-height:1.78;max-width:44ch}
+
+/* ---------- steps ---------- */
+.steps-sec{padding:clamp(88px,12vh,150px) 0;position:relative;
+  background:
+    radial-gradient(ellipse 74% 40% at 50% -6%,rgba(246,239,228,.95) 0%,transparent 58%),
+    radial-gradient(ellipse 48% 44% at 92% 78%,rgba(16,166,194,.13) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 38% at 6% 60%,rgba(224,203,172,.24) 0%,transparent 58%),
+    linear-gradient(180deg,#f4ece1 0%,#edf2f2 16%,var(--paper) 44%,var(--paper-4) 100%)}
+.steps-sec .head{text-align:center;margin-bottom:clamp(52px,7vw,84px)}
+.steps-sec .head .eyebrow{margin-bottom:22px}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--hair)}
+.st{padding:clamp(30px,3.5vw,46px) clamp(18px,2.4vw,34px);border-left:1px solid var(--hair-2);position:relative;transition:background .6s}
+.st:first-child{border-left:none}
+.st:hover{background:rgba(255,255,255,.5)}
+.st::before{content:'';position:absolute;top:-1px;left:0;width:0;height:1px;background:var(--teal);transition:width .8s var(--ease)}
+.st:hover::before{width:100%}
+.st .n{font-family:var(--display);font-size:15px;letter-spacing:2px;color:var(--teal-d);margin-bottom:26px}
+.st h3{font-family:var(--display);font-weight:400;font-size:clamp(21px,2.2vw,28px);margin-bottom:13px;line-height:1.22;color:var(--ink)}
+.st p{font-size:15.5px;color:var(--mut);line-height:1.74}
+
+/* ---------- trust ---------- */
+.trust{padding:clamp(88px,12vh,150px) 0;position:relative;
+  background:
+    radial-gradient(ellipse 54% 40% at 14% 8%,rgba(255,255,255,.72) 0%,transparent 58%),
+    radial-gradient(ellipse 42% 36% at 94% 28%,rgba(224,203,172,.3) 0%,transparent 56%),
+    radial-gradient(ellipse 86% 54% at 50% 104%,rgba(16,166,194,.15) 0%,transparent 62%),
+    linear-gradient(180deg,var(--paper-4) 0%,var(--paper-2) 40%,#cee2ec 100%)}
+.trust .head{text-align:center;margin-bottom:clamp(52px,7vw,84px)}
+.trust .head .eyebrow{margin-bottom:22px}
+.tg{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(30px,4vw,54px) clamp(40px,7vw,110px)}
+.tg>div{padding-top:26px;border-top:1px solid var(--hair);position:relative}
+.tg>div::before{content:'';position:absolute;top:-1px;left:0;width:0;height:1px;background:var(--teal);transition:width .9s var(--ease)}
+.tg>div:hover::before{width:100%}
+.tg h3{font-family:var(--display);font-weight:400;font-size:clamp(22px,2.4vw,30px);margin-bottom:11px;color:var(--ink)}
+.tg p{font-size:16px;color:var(--mut);line-height:1.76;max-width:42ch}
+
+/* ---------- footer ---------- */
+.fcta{position:relative;padding:clamp(100px,16vh,200px) 0 0;text-align:center;overflow:hidden;
+  background:
+    radial-gradient(ellipse 66% 44% at 50% -4%,rgba(255,255,255,.82) 0%,transparent 58%),
+    radial-gradient(ellipse 52% 46% at 6% 72%,rgba(224,203,172,.34) 0%,transparent 60%),
+    radial-gradient(ellipse 56% 50% at 96% 86%,rgba(16,166,194,.15) 0%,transparent 58%),
+    linear-gradient(186deg,var(--paper-5) 0%,#d8e9f0 28%,var(--teal-mist) 58%,#cbdfe9 100%)}
+.fcta .container{position:relative;z-index:2}
+.fcta h2{margin-bottom:24px}
+.fcta h2 .it{font-style:italic;color:var(--teal-d)}
+.fcta .sub{font-size:16.5px;color:var(--mut);max-width:560px;margin:0 auto 44px}
+.fcta .badge{margin-bottom:38px}
+.fbot{margin-top:clamp(80px,12vh,140px);border-top:1px solid var(--hair-2);padding:34px 0;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+.fbot .tag{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--mut-2)}
+.fbot .cr{font-size:12.5px;color:var(--mut-2);letter-spacing:.4px}
+
+/* ---------- diamond facet shimmer ---------- */
+.fct{transition:opacity 1.4s ease}
+.sh1{animation:shim 7s ease-in-out infinite}
+.sh2{animation:shim 7s ease-in-out 1.7s infinite}
+.sh3{animation:shim 7s ease-in-out 3.4s infinite}
+.sh4{animation:shim 7s ease-in-out 5.1s infinite}
+@keyframes shim{0%,100%{opacity:.3}45%{opacity:.85}}
+
+/* ---------- responsive ---------- */
+@media(max-width:960px){
+  .steps{grid-template-columns:repeat(2,1fr)}
+  .st:nth-child(3){border-left:none}
+  .st:nth-child(n+3){border-top:1px solid var(--hair-2)}
+  .pn{grid-template-columns:64px 1fr;row-gap:16px}
+  .pn p{grid-column:2}
+}
+@media(max-width:680px){
+  .tg{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}
+  .st{border-left:none;border-top:1px solid var(--hair-2)}
+  .st:first-child{border-top:none}
+  .hero .ctas{flex-direction:column;align-items:stretch}
+  .hero .ctas .btn{justify-content:center}
+  .fbot{flex-direction:column;text-align:center}
+  .scroll-cue{display:none}
+  svg.logo{width:164px}
+  .nav .container,.nav.stuck .container{height:70px}
+  .hero{padding:104px 0 76px}
+}
+
+/* ---------- phones ---------- */
+@media(max-width:520px){
+  svg.logo{width:148px}
+  /* tighter tracking + padding so long uppercase labels fit one line */
+  .btn{padding:18px 24px;letter-spacing:1.8px;font-size:11.5px;gap:9px}
+  .badge{font-size:10px;letter-spacing:1.6px;padding:9px 16px;gap:8px;max-width:100%}
+  .eyebrow{font-size:10.5px;letter-spacing:2.2px;gap:10px}
+  .eyebrow::before,.eyebrow.mid::after{width:22px}
+  /* touch targets */
+  .nav .lk{padding:14px 0;font-size:11.5px;letter-spacing:1.8px}
+  .link-u{display:inline-block;padding:12px 0 10px;letter-spacing:2px}
+  .fbot{gap:6px;padding:28px 0}
+  .fbot .tag{letter-spacing:2.2px}
+  .mq{padding:22px 0}
+  .mq-track em{padding:0 20px}
+  .pn{grid-template-columns:48px 1fr;gap:18px}
+  .pn .idx{font-size:28px}
+  .mani blockquote{font-size:23px;line-height:1.36}
+  h1.disp{font-size:40px}
+  h2.disp{font-size:31px}
+  .lead{font-size:19px}
+  .pn p,.st p,.tg p,.fcta .sub{font-size:15.5px}
+}
+@media(max-width:380px){
+  svg.logo{width:132px}
+  .nav .lk{font-size:10.5px;letter-spacing:1.2px}
+  .btn{padding:17px 18px;letter-spacing:1.2px;font-size:11px}
+  .badge{letter-spacing:1.2px;font-size:9.5px}
+  .eyebrow::before,.eyebrow.mid::after{display:none}
+  h1.disp{font-size:35px}
+  h2.disp{font-size:28px}
+  .pn{grid-template-columns:1fr;row-gap:10px}
+  .pn p{grid-column:1}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .rv,.rv-b{opacity:1!important;transform:none!important;filter:none!important}
+  .w i{transform:none!important}
+}
 </style>
 </head>
 <body>
 
-<!-- shared logo template -->
-<template id="logoTpl">
-<svg class="logo-svg" viewBox="0 0 300 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="K.Girdharlal">
-  <path d="M25.4 3 L25.4 44 L3 44 C16 40 24 24 25.4 3 Z" fill="#14A8C4"/>
-  <path d="M28.6 3 L28.6 44 L51 44 C38 40 30 24 28.6 3 Z" fill="#14A8C4"/>
-  <text x="62" y="34" font-family="'Segoe UI',sans-serif" font-size="21" font-weight="600" letter-spacing="5" fill="#1b2437">K.GIRDHARLAL</text>
-  <rect x="62" y="41" width="212" height="2.4" fill="#14A8C4"/>
-  <text x="62" y="53" font-family="'Segoe UI',sans-serif" font-size="8" letter-spacing="2.6" fill="#5a6b7a">THERE'S MORE TO MAKING DIAMONDS</text>
-</svg>
-</template>
+<div class="grain"></div>
+<div class="prog" id="prog"></div>
+<div class="cur" id="cur"></div>
+<div class="cur-r" id="curR"></div>
 
-<!-- ============ LOGIN ============ -->
-<div id="loginView">
-  <div class="login-card">
-    <div class="lg" data-logo style="width:265px"></div>
-    <h1>Diamond Bidding</h1>
-    <div class="sub">Sign in to view stones &amp; place your bids</div>
-    <label>Your Name</label>
-    <input id="inName" placeholder="e.g. Jitu Patel" autocomplete="name">
-    <label>Company Name</label>
-    <input id="inCompany" placeholder="e.g. ABC Diamonds LLC" autocomplete="organization">
-    <label>Email or Mobile Number</label>
-    <input id="inContact" placeholder="you@company.com / +91 98xxxxxx" autocomplete="email">
-    <label>Password</label>
-    <input id="inPass" type="password" placeholder="Your password" autocomplete="current-password">
-    <div style="font-size:11.5px;color:var(--mut);margin-top:6px">First time here? Your account is created with this password &mdash; use the same one next time. Forgot it? Contact K.Girdharlal to reset.</div>
-    <div class="err" id="loginErr"></div>
-    <button class="btn-main" id="loginBtn" onclick="doLogin()">Enter Bidding Room →</button>
-  </div>
+<!-- preloader -->
+<div id="pre">
+  <svg class="pl" viewBox="0 0 300 92" xmlns="http://www.w3.org/2000/svg" aria-label="K.Girdharlal">
+    <path d="M148.4 4 L148.4 44 L118 44 C135 39 146.6 24 148.4 4 Z" fill="#10A6C2"/>
+    <path d="M151.6 4 L151.6 44 L182 44 C165 39 153.4 24 151.6 4 Z" fill="#10A6C2"/>
+    <text x="150" y="70" text-anchor="middle" textLength="240" lengthAdjust="spacing"
+      font-family="Jost,'Segoe UI',sans-serif" font-size="22" font-weight="400" fill="#1d2b35">K.GIRDHARLAL</text>
+    <rect x="30" y="77" width="240" height="1.6" fill="#10A6C2"/>
+    <text x="150" y="89" text-anchor="middle" textLength="228" lengthAdjust="spacing"
+      font-family="Jost,'Segoe UI',sans-serif" font-size="7.6" fill="#42545f">THERE'S MORE TO MAKING DIAMONDS</text>
+  </svg>
+  <div class="bar"><i></i></div>
 </div>
 
-<!-- ============ APP ============ -->
-<div id="appView" class="hidden">
-  <header class="app">
-    <div data-logo style="width:215px"></div>
-    <div class="evname" id="evName"></div>
-    <div class="countdown" id="countdown">ENDS IN: <b>--:--:--</b></div>
-    <div class="userchip" id="userChip"></div>
-    <button class="btn-ghost btn-sm" onclick="logout()">Logout</button>
-  </header>
+<!-- nav -->
+<nav class="nav" id="nav">
+  <div class="container">
+    <a href="#top" aria-label="K.Girdharlal home">
+      <svg class="logo" viewBox="0 0 300 56" xmlns="http://www.w3.org/2000/svg" aria-label="K.Girdharlal">
+        <path d="M25.4 3 L25.4 43 L4 43 C17 38.5 24 23.5 25.4 3 Z" fill="#10A6C2"/>
+        <path d="M28.6 3 L28.6 43 L50 43 C37 38.5 30 23.5 28.6 3 Z" fill="#10A6C2"/>
+        <text x="62" y="33" textLength="206" lengthAdjust="spacing"
+          font-family="Jost,'Segoe UI',sans-serif" font-size="20" font-weight="400" fill="#1d2b35">K.GIRDHARLAL</text>
+        <rect x="62" y="39.5" width="206" height="1.5" fill="#10A6C2"/>
+        <text x="62" y="51" textLength="206" lengthAdjust="spacing"
+          font-family="Jost,'Segoe UI',sans-serif" font-size="7" fill="#42545f">THERE'S MORE TO MAKING DIAMONDS</text>
+      </svg>
+    </a>
+    <a class="lk" href="/portal" data-cur>Enter Portal</a>
+  </div>
+</nav>
 
-  <div id="closedBanner" class="closed-banner hidden">Bidding for this event has ended. Bids can no longer be placed or changed.</div>
-
-  <div class="toolbar">
-    <div class="tabs">
-      <button id="tabAll" class="on" onclick="setTab('all')">All Stones</button>
-      <button id="tabMine" onclick="setTab('mine')">My Bids <span id="myBidCount"></span></button>
-    </div>
-    <input type="search" id="q" placeholder="Search stone ID, color, clarity…" oninput="render()">
-    <select id="fShape" onchange="render()"><option value="">Shape: All</option></select>
-    <select id="fColor" onchange="render()"><option value="">Color: All</option></select>
-    <select id="fClarity" onchange="render()"><option value="">Clarity: All</option></select>
-    <span class="count-pill" id="countPill"></span>
-    <div class="spacer"></div>
-    <button class="btn-excel" id="myExcelBtn" onclick="downloadMyBids()" style="display:none">⬇ My Bids Excel</button>
-    <button class="btn-main btn-sm" id="bidSelBtn" onclick="openBidModal(selected())" disabled>Bid Selected (0)</button>
+<!-- hero -->
+<header class="hero" id="top">
+  <div class="hero-glow"></div>
+  <div class="dia-wrap" id="diaWrap">
+    <svg class="dia" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="gA" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#10A6C2" stop-opacity=".34"/>
+          <stop offset="1" stop-color="#10A6C2" stop-opacity=".03"/>
+        </linearGradient>
+        <linearGradient id="gB" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e0cbac" stop-opacity=".6"/>
+          <stop offset="1" stop-color="#10A6C2" stop-opacity=".05"/>
+        </linearGradient>
+        <radialGradient id="gT" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".72"/>
+          <stop offset="1" stop-color="#10A6C2" stop-opacity=".1"/>
+        </radialGradient>
+      </defs>
+      <g stroke="rgba(16,166,194,.2)" stroke-width=".9" fill="none">
+        <circle cx="200" cy="200" r="150"/>
+        <circle cx="200" cy="200" r="143" stroke="rgba(224,203,172,.55)"/>
+      </g>
+      <!-- bezel facets -->
+      <g stroke="rgba(16,166,194,.22)" stroke-width=".8">
+        <polygon class="fct sh1" fill="url(#gA)" points="250.82,221.05 350,200 306.07,306.07"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".42" points="221.05,250.82 306.07,306.07 200,350"/>
+        <polygon class="fct sh2" fill="url(#gA)" points="178.95,250.82 200,350 93.93,306.07"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".3" points="149.18,221.05 93.93,306.07 50,200"/>
+        <polygon class="fct sh3" fill="url(#gA)" points="149.18,178.95 50,200 93.93,93.93"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".42" points="178.95,149.18 93.93,93.93 200,50"/>
+        <polygon class="fct sh4" fill="url(#gA)" points="221.05,149.18 200,50 306.07,93.93"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".3" points="250.82,178.95 306.07,93.93 350,200"/>
+      </g>
+      <!-- star facets -->
+      <g stroke="rgba(16,166,194,.18)" stroke-width=".8">
+        <polygon class="fct" fill="url(#gB)" opacity=".34" points="250.82,221.05 221.05,250.82 306.07,306.07"/>
+        <polygon class="fct sh3" fill="url(#gA)" points="221.05,250.82 178.95,250.82 200,350"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".26" points="178.95,250.82 149.18,221.05 93.93,306.07"/>
+        <polygon class="fct sh1" fill="url(#gA)" points="149.18,221.05 149.18,178.95 50,200"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".34" points="149.18,178.95 178.95,149.18 93.93,93.93"/>
+        <polygon class="fct sh4" fill="url(#gA)" points="178.95,149.18 221.05,149.18 200,50"/>
+        <polygon class="fct" fill="url(#gB)" opacity=".26" points="221.05,149.18 250.82,178.95 306.07,93.93"/>
+        <polygon class="fct sh2" fill="url(#gA)" points="250.82,178.95 250.82,221.05 350,200"/>
+      </g>
+      <!-- table -->
+      <polygon fill="url(#gT)" stroke="rgba(16,166,194,.34)" stroke-width="1"
+        points="250.82,221.05 221.05,250.82 178.95,250.82 149.18,221.05 149.18,178.95 178.95,149.18 221.05,149.18 250.82,178.95"/>
+    </svg>
   </div>
 
-  <div class="wrap">
-    <div class="tbl-card">
-      <table id="tbl">
-        <thead><tr id="theadRow"></tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-      <div class="empty hidden" id="emptyMsg">No stones match your filters.</div>
-    </div>
-  </div>
-
-  <div class="bottombar">
-    <div class="stat"><div class="l">My Bids</div><div class="v" id="sbCount">0</div></div>
-    <div class="stat"><div class="l">Total Cts</div><div class="v" id="sbCts">0.00</div></div>
-    <div class="stat"><div class="l">Avg Bid $/Ct</div><div class="v" id="sbAvg">0</div></div>
-    <div class="stat"><div class="l">Total Bid Amount</div><div class="v" id="sbAmt">$0</div></div>
-    <div class="spacer"></div>
-    <div class="terms" id="evTerms"></div>
-  </div>
-</div>
-
-<!-- ============ DISCLAIMER MODAL ============ -->
-<div class="overlay hidden" id="discOverlay" style="z-index:70">
-  <div class="modal" style="max-width:640px">
-    <div class="modal-h"><h2>Bidding Terms &amp; Disclaimer</h2></div>
-    <div class="modal-b" style="font-size:13px">
-      <p style="color:var(--mut);margin-bottom:12px">Please read and accept the following terms before entering the bidding room:</p>
-      <ol style="padding-left:18px;display:grid;gap:10px">
-        <li><b>Bid Commitment.</b> All bids submitted are considered firm and binding. Once a bid is accepted by K.Girdharlal, the bidder is obligated to complete the purchase in accordance with the agreed terms and conditions.</li>
-        <li><b>Right to Accept or Reject Bids.</b> K.Girdharlal reserves the right to accept, reject, or cancel any bid, in whole or in part, at its sole discretion, without assigning any reason. Submission of the highest bid does not guarantee allocation of the goods.</li>
-        <li><b>Product Availability &amp; Errors.</b> All diamonds are subject to prior sale, availability, and verification. K.Girdharlal reserves the right to withdraw any item or correct any pricing, grading, inventory, or typographical errors at any time before order confirmation.</li>
-        <li><b>Confidentiality.</b> All stock details, prices, and bid information shared on this portal are strictly confidential and intended solely for the registered bidder. They may not be shared, forwarded, or disclosed to any third party without prior written consent of K.Girdharlal.</li>
-        <li><b>Payment &amp; Non-Payment.</b> Successful bidders must complete payment within the stipulated timeframe. Failure to do so may result in cancellation of the order, suspension of bidding privileges, or other actions deemed appropriate by K.Girdharlal.</li>
-      </ol>
-    </div>
-    <div class="modal-f">
-      <button class="btn-ghost" onclick="declineDisc()">Decline</button>
-      <button class="btn-main" onclick="acceptDisc()">I Agree &amp; Continue</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ BID MODAL ============ -->
-<div class="overlay hidden" id="bidOverlay">
-  <div class="modal">
-    <div class="modal-h"><h2>Place Bid</h2><button class="modal-x" onclick="closeBid()">×</button></div>
-    <div class="modal-b">
-      <div class="bid-note">Enter <b>Bid Disc%</b> <i>or</i> <b>Bid $/Ct</b> — the other is calculated automatically from the Rap rate. Amount = Bid $/Ct × Cts. You can revise or remove your bid any time until the auction ends.</div>
-      <div style="overflow:auto">
-      <table class="bidtbl" id="bidTbl">
-        <thead><tr>
-          <th class="nosort">Stone ID</th><th class="nosort">Cts</th><th class="nosort">Col</th><th class="nosort">Cla</th>
-          <th class="nosort">Rap</th><th class="nosort">Ask Disc%</th><th class="nosort">Ask $/Ct</th>
-          <th class="nosort">Bid Disc%</th><th class="nosort">Bid $/Ct</th><th class="nosort">Bid Amount $</th>
-        </tr></thead>
-        <tbody id="bidTbody"></tbody>
-      </table>
+  <div class="container">
+    <div class="hero-inner" id="heroInner">
+      <div class="badge rv"><span class="dot"></span>New inventory uploaded regularly</div>
+      <div class="eyebrow mid rv">The K.Girdharlal Bidding Portal</div>
+      <h1 class="disp split" data-split>The Stones the Market Is Already Asking For</h1>
+      <p class="lead rv-b">Not clearance. Not leftover stock. <b>Just curated demand.</b></p>
+      <div class="ctas rv">
+        <a class="btn" href="/portal" data-cur><span>Enter the Bidding Portal</span><em class="ar">→</em></a>
+        <a class="btn ghost" href="#difference" data-cur><span>The Difference</span></a>
       </div>
+      <div class="fine rv">Access by registered trade account</div>
     </div>
-    <div class="modal-f">
-      <div class="err" id="bidErr"></div>
-      <button class="btn-ghost" onclick="closeBid()">Cancel</button>
-      <button class="btn-main" id="placeBidBtn" onclick="submitBids()">Place Bid</button>
+  </div>
+
+  <div class="scroll-cue"><span>Scroll</span><div class="ln"></div></div>
+</header>
+
+<!-- marquee -->
+<div class="mq">
+  <div class="mq-track">
+    <div>
+      <em>New Inventory Uploaded Regularly</em><b>◆</b><em>Returning Favourites</em><b>◆</b><em>GIA Certified</em><b>◆</b>
+      <em>Curated, Never Cleared</em><b>◆</b><em>Confidential Bidding</em><b>◆</b><em>Trade Only</em><b>◆</b>
+    </div>
+    <div aria-hidden="true">
+      <em>New Inventory Uploaded Regularly</em><b>◆</b><em>Returning Favourites</em><b>◆</b><em>GIA Certified</em><b>◆</b>
+      <em>Curated, Never Cleared</em><b>◆</b><em>Confidential Bidding</em><b>◆</b><em>Trade Only</em><b>◆</b>
     </div>
   </div>
 </div>
 
-<!-- ============ STONE DETAIL MODAL ============ -->
-<div class="overlay hidden" id="detailOverlay">
-  <div class="modal">
-    <div class="modal-h"><h2 id="dTitle">Stone</h2><button class="modal-x" onclick="closeDetail()">×</button></div>
-    <div class="modal-b">
-      <div class="link-row" id="dLinks"></div>
-      <div class="detail-grid">
-        <div id="dMedia"></div>
-        <div class="spec-list" id="dSpecs"></div>
-      </div>
+<!-- manifesto -->
+<section class="mani">
+  <div class="container">
+    <div class="eyebrow mid rv">Our Philosophy</div>
+    <blockquote class="rv-b">Every stone here — new or returning — earns its place through <em>research, not routine.</em> We track cut trends, certification demand and buyer interest continuously, and list only what the market is actively asking for.</blockquote>
+  </div>
+</section>
+
+<!-- editorial panels -->
+<section class="panels" id="difference">
+  <div class="container">
+    <div class="head">
+      <div class="eyebrow rv">The Difference</div>
+      <h2 class="disp split" data-split>A list built on intent</h2>
     </div>
-    <div class="modal-f">
-      <button class="btn-ghost" onclick="closeDetail()">Close</button>
-      <button class="btn-main" id="dBidBtn">Add Bid</button>
+
+    <div class="pn rv">
+      <div class="idx">01</div>
+      <h3>New Inventory,<br>Uploaded Regularly</h3>
+      <p>Fresh stones are added to the portal on an ongoing basis. Every upload is worth revisiting — what wasn't there last week may be exactly what you're looking for today.</p>
+    </div>
+    <div class="pn rv">
+      <div class="idx">02</div>
+      <h3>Continuously<br>Curated</h3>
+      <p>New stones are added the moment they arrive. Others return to the list because demand for them hasn't faded. The list is never static, and never padded.</p>
+    </div>
+    <div class="pn rv">
+      <div class="idx">03</div>
+      <h3>Trend-Led<br>Research</h3>
+      <p>Every stone, new or re-listed, is chosen for real buyer interest — never for how long it has been sitting in stock.</p>
+    </div>
+    <div class="pn rv">
+      <div class="idx">04</div>
+      <h3>Never<br>Clearance</h3>
+      <p>Nothing is listed here to clear space or move old stock at a discount. If it appears on this list, buyers want it.</p>
     </div>
   </div>
-</div>
+</section>
+
+<!-- steps -->
+<section class="steps-sec" id="how">
+  <div class="container">
+    <div class="head">
+      <div class="eyebrow mid rv">How Bidding Works</div>
+      <h2 class="disp split" data-split>From registration to result</h2>
+    </div>
+    <div class="steps">
+      <div class="st rv"><div class="n">I</div><h3>Register</h3><p>Sign in with your name, company and a password. One account, fully yours.</p></div>
+      <div class="st rv"><div class="n">II</div><h3>Browse</h3><p>Full specifications and certification on every stone — new arrivals and returning favourites alike.</p></div>
+      <div class="st rv"><div class="n">III</div><h3>Bid</h3><p>Bid per stone. Revise or withdraw anytime before the event closes.</p></div>
+      <div class="st rv"><div class="n">IV</div><h3>Result</h3><p>Once bidding closes, a full summary of your bids arrives directly in your inbox.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- trust -->
+<section class="trust">
+  <div class="container">
+    <div class="head">
+      <div class="eyebrow mid rv">Why K.Girdharlal</div>
+      <h2 class="disp split" data-split>Built on trust, not just trend</h2>
+    </div>
+    <div class="tg">
+      <div class="rv"><h3>GIA-Certified</h3><p>Every stone backed by certification, linked directly for your own review.</p></div>
+      <div class="rv"><h3>Confidential by Design</h3><p>Your bids and pricing are visible only to you and K.Girdharlal.</p></div>
+      <div class="rv"><h3>Transparent Terms</h3><p>Bidding terms are laid out in full before you place a single bid.</p></div>
+      <div class="rv"><h3>Live Bid Tracking</h3><p>Track, revise or withdraw your bids at any point before the event closes.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- footer cta -->
+<footer class="fcta">
+  <div class="container">
+    <div class="badge rv"><span class="dot"></span>New inventory uploaded regularly</div>
+    <h2 class="disp rv-b">New arrivals. Returning favourites.<br><span class="it">All worth a bid.</span></h2>
+    <p class="sub rv">Portal access is by invitation, extended to K.Girdharlal's registered trade partners.</p>
+    <div class="rv"><a class="btn" href="/portal" data-cur><span>Enter the Bidding Portal</span><em class="ar">→</em></a></div>
+
+    <div class="fbot">
+      <div class="tag">There's More to Making Diamonds</div>
+      <a class="link-u" href="/portal" data-cur>Enter Portal</a>
+      <div class="cr">© 2026 K.Girdharlal &amp; Co.</div>
+    </div>
+  </div>
+</footer>
 
 <script>
-// stamp the logo everywhere
-document.querySelectorAll('[data-logo]').forEach(el=>{
-  el.appendChild(document.getElementById('logoTpl').content.cloneNode(true));
-});
+(function(){
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-let ME=null, EV=null, STONES=[], MYBIDS={}, TAB='all', SORT={key:'cts',dir:-1}, TIME_OFF=0, CHECKED=new Set();
-const $=id=>document.getElementById(id);
-const fmt=(n,d=2)=>n==null?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
-const fmt0=n=>n==null?'-':Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
-
-async function api(url,opts={}){
-  const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});
-  const j=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(j.error||'Request failed');
-  return j;
-}
-function toast(msg,cls='ok'){
-  const t=document.createElement('div');t.className='toast '+cls;t.textContent=msg;
-  document.body.appendChild(t);setTimeout(()=>t.remove(),2600);
-}
-
-/* ---------- login ---------- */
-async function doLogin(){
-  $('loginErr').textContent='';
-  $('loginBtn').disabled=true;
-  try{
-    const j=await api('/api/client-login',{method:'POST',body:JSON.stringify({
-      name:$('inName').value,company:$('inCompany').value,contact:$('inContact').value,password:$('inPass').value})});
-    ME=j.client; enterApp();
-  }catch(e){$('loginErr').textContent=e.message}
-  $('loginBtn').disabled=false;
-}
-async function logout(){await api('/api/logout',{method:'POST',body:JSON.stringify({kind:'c'})});location.reload()}
-
-/* ---------- app boot ---------- */
-function acceptDisc(){sessionStorage.setItem('kgDisc','1');$('discOverlay').classList.add('hidden')}
-async function declineDisc(){await logout()}
-async function enterApp(){
-  $('loginView').classList.add('hidden');
-  $('appView').classList.remove('hidden');
-  if(sessionStorage.getItem('kgDisc')!=='1')$('discOverlay').classList.remove('hidden');
-  $('userChip').innerHTML=`<b>${esc(ME.name)}</b> · ${esc(ME.company)}`;
-  await loadData();
-  setInterval(tick,1000);
-  setInterval(loadBidsOnly,30000);
-}
-async function loadData(){
-  const j=await api('/api/stones');
-  EV=j.event; STONES=j.stones||[];
-  TIME_OFF=j.server_time-Date.now();
-  if(!EV){$('evName').textContent='No live bidding event right now';$('tbody').innerHTML='';$('emptyMsg').textContent='No live bidding event at the moment. Please check back later.';$('emptyMsg').classList.remove('hidden');return}
-  $('evName').textContent=EV.name;
-  $('evTerms').textContent=EV.terms||'';
-  buildFilters(); await loadBidsOnly(); render();
-}
-async function loadBidsOnly(){
-  try{const j=await api('/api/my-bids');MYBIDS={};for(const b of j.bids)MYBIDS[b.stone_pk]=b;render()}catch(e){}
-}
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-
-function buildFilters(){
-  const fill=(id,vals,label)=>{const s=$(id);s.innerHTML=`<option value="">${label}: All</option>`+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${esc(v)}</option>`).join('')};
-  fill('fShape',STONES.map(s=>s.shape),'Shape');
-  fill('fColor',STONES.map(s=>s.color),'Color');
-  fill('fClarity',STONES.map(s=>s.clarity),'Clarity');
-}
-
-/* ---------- countdown ---------- */
-function now(){return Date.now()+TIME_OFF}
-function isOpen(){return EV&&EV.status==='live'&&now()<EV.end_time}
-function tick(){
-  if(!EV)return;
-  const el=$('countdown'),ms=EV.end_time-now();
-  if(ms<=0){el.innerHTML='ENDED';el.classList.add('over');$('closedBanner').classList.remove('hidden');return}
-  const d=Math.floor(ms/86400000),h=Math.floor(ms%86400000/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000);
-  const p=n=>String(n).padStart(2,'0');
-  el.innerHTML=`ENDS IN: <b>${d>0?d+'d ':''}${p(h)}:${p(m)}:${p(s)}</b>`;
-}
-
-/* ---------- table ---------- */
-const COLS=[
-  {key:'_chk',label:'',nosort:true},
-  {key:'stone_id',label:'Stone ID'},
-  {key:'shape',label:'Shape'},
-  {key:'cts',label:'Cts',num:true},
-  {key:'color',label:'Col'},
-  {key:'clarity',label:'Cla'},
-  {key:'_cps',label:'Cut·Pol·Sym',nosort:true},
-  {key:'fluor',label:'Fluor'},
-  {key:'measurements',label:'Measurements',nosort:true},
-  {key:'rap',label:'Rap',num:true},
-  {key:'disc',label:'Disc%',num:true},
-  {key:'price_ct',label:'$/Ct',num:true},
-  {key:'amount',label:'Amt $',num:true},
-  {key:'lab',label:'Lab'},
-  {key:'_mybid',label:'My Bid',nosort:true},
-  {key:'_act',label:'',nosort:true},
-];
-function setTab(t){TAB=t;$('tabAll').classList.toggle('on',t==='all');$('tabMine').classList.toggle('on',t==='mine');render()}
-function sortBy(key,num){
-  if(SORT.key===key)SORT.dir*=-1;else SORT={key,dir:num?-1:1};
-  render();
-}
-function filtered(){
-  const q=$('q').value.trim().toLowerCase(),sh=$('fShape').value,co=$('fColor').value,cl=$('fClarity').value;
-  let list=STONES.filter(s=>
-    (!sh||s.shape===sh)&&(!co||s.color===co)&&(!cl||s.clarity===cl)&&
-    (!q||[s.stone_id,s.color,s.clarity,s.shape,s.lab,s.report_no].join(' ').toLowerCase().includes(q)));
-  if(TAB==='mine')list=list.filter(s=>MYBIDS[s.id]);
-  const {key,dir}=SORT;
-  list.sort((a,b)=>{const x=a[key],y=b[key];
-    if(x==null)return 1;if(y==null)return -1;
-    return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*dir});
-  return list;
-}
-function selected(){return STONES.filter(s=>CHECKED.has(s.id))}
-function render(){
-  $('theadRow').innerHTML=COLS.map(c=>{
-    if(c.key==='_chk')return `<th class="nosort"><input type="checkbox" id="chkAll" onclick="toggleAll(this)"></th>`;
-    const arr=SORT.key===c.key?`<span class="arr">${SORT.dir>0?'▲':'▼'}</span>`:'';
-    return `<th ${c.nosort?'class="nosort"':`onclick="sortBy('${c.key}',${!!c.num})"`}>${c.label} ${arr}</th>`;
-  }).join('');
-  const list=filtered(),open=isOpen();
-  $('tbody').innerHTML=list.map(s=>{
-    const b=MYBIDS[s.id];
-    return `<tr class="${b?'hasbid':''}">
-      <td><input type="checkbox" ${CHECKED.has(s.id)?'checked':''} onclick="toggleChk(${s.id},this)"></td>
-      <td><span class="sid" onclick="openDetail(${s.id})">${esc(s.stone_id)}</span></td>
-      <td>${esc(s.shape)}</td>
-      <td><b>${fmt(s.cts)}</b></td>
-      <td>${esc(s.color)}</td>
-      <td>${esc(s.clarity)}</td>
-      <td>${[s.cut,s.pol,s.symm].filter(Boolean).join('·')||'-'}</td>
-      <td>${esc(s.fluor||'-')}</td>
-      <td>${esc(s.measurements||'-')}</td>
-      <td>${fmt0(s.rap)}</td>
-      <td class="disc-red">${s.disc==null?'-':fmt(s.disc)+'%'}</td>
-      <td class="pricect">${fmt0(s.price_ct)}</td>
-      <td>${fmt0(s.amount)}</td>
-      <td>${s.lab?`${s.cert_url?`<a href="${esc(s.cert_url)}" target="_blank" rel="noopener" style="text-decoration:none"><span class="lab-tag">${esc(s.lab)}</span></a>`:`<span class="lab-tag">${esc(s.lab)}</span>`}`:'-'}</td>
-      <td>${b?`<span class="mybid">${b.bid_disc==null?'':fmt(b.bid_disc)+'% · '}$${fmt0(b.bid_per_ct)}/ct</span>${open?`<button class="del-bid" onclick="delBid(${s.id})">✕ Remove</button>`:''}`:'-'}</td>
-      <td>${open?`<button class="bid-btn ${b?'edit':''}" onclick='openBidModal([getStone(${s.id})])'>${b?'Edit Bid':'Add Bid'}</button>`:''}</td>
-    </tr>`;
-  }).join('');
-  $('emptyMsg').classList.toggle('hidden',list.length>0);
-  $('countPill').textContent=`${list.length} of ${STONES.length} stones`;
-  const sel=selected();
-  $('bidSelBtn').textContent=`Bid Selected (${sel.length})`;
-  $('bidSelBtn').disabled=!sel.length||!open;
-  const bids=Object.values(MYBIDS);
-  $('myExcelBtn').style.display=bids.length?'':'none';
-  $('myBidCount').textContent=bids.length?`(${bids.length})`:'';
-  $('sbCount').textContent=bids.length;
-  const stById=Object.fromEntries(STONES.map(s=>[s.id,s]));
-  const cts=bids.reduce((a,b)=>a+(stById[b.stone_pk]?.cts||0),0);
-  const amt=bids.reduce((a,b)=>a+b.bid_amount,0);
-  $('sbCts').textContent=fmt(cts);
-  $('sbAvg').textContent=cts?('$'+fmt0(amt/cts)):'0';
-  $('sbAmt').textContent='$'+fmt0(amt);
-}
-function getStone(id){return STONES.find(s=>s.id===id)}
-function toggleChk(id,el){el.checked?CHECKED.add(id):CHECKED.delete(id);render()}
-function toggleAll(el){const list=filtered();CHECKED=el.checked?new Set(list.map(s=>s.id)):new Set();render()}
-function downloadMyBids(){location.href='/api/my-bids/export'}
-
-/* ---------- bid modal ---------- */
-let BID_ROWS=[];
-function openBidModal(stones){
-  if(!stones||!stones.length)return;
-  if(!isOpen()){toast('Bidding is closed','bad');return}
-  BID_ROWS=stones;
-  $('bidErr').textContent='';
-  $('bidTbody').innerHTML=stones.map((s,i)=>{
-    const b=MYBIDS[s.id];
-    return `<tr>
-      <td><b>${esc(s.stone_id)}</b></td><td>${fmt(s.cts)}</td><td>${esc(s.color)}</td><td>${esc(s.clarity)}</td>
-      <td>${fmt0(s.rap)}</td><td class="disc-red">${s.disc==null?'-':fmt(s.disc)+'%'}</td><td class="pricect">${fmt0(s.price_ct)}</td>
-      <td>${s.rap?`<input id="bd${i}" type="number" step="0.01" placeholder="Disc %" value="${b&&b.bid_disc!=null?b.bid_disc:''}" oninput="calcRow(${i},'disc')">`:'-'}</td>
-      <td><input id="bp${i}" type="number" step="0.01" placeholder="$/Ct" value="${b?b.bid_per_ct:''}" oninput="calcRow(${i},'price')"></td>
-      <td class="amt-cell" id="ba${i}">${b?fmt(b.bid_amount):'-'}</td>
-    </tr>`;
-  }).join('');
-  $('bidOverlay').classList.remove('hidden');
-}
-function calcRow(i,src){
-  const s=BID_ROWS[i],bd=$('bd'+i),bp=$('bp'+i),ba=$('ba'+i);
-  if(src==='disc'&&s.rap&&bd){
-    const d=parseFloat(bd.value);
-    bp.value=isFinite(d)?(s.rap*(1-d/100)).toFixed(2):'';
-  }else if(src==='price'&&s.rap&&bd){
-    const p=parseFloat(bp.value);
-    bd.value=isFinite(p)?((1-p/s.rap)*100).toFixed(2):'';
+  /* ---- preloader ---- */
+  var preHidden = false;
+  function hidePre(){
+    if(preHidden) return;
+    preHidden = true;
+    var p = document.getElementById('pre');
+    if(p) p.classList.add('done');
+    document.body.classList.add('cur-on');
   }
-  const p=parseFloat(bp.value);
-  ba.textContent=isFinite(p)&&p>0?fmt(p*s.cts):'-';
-}
-function closeBid(){$('bidOverlay').classList.add('hidden')}
-async function submitBids(){
-  const bids=[];
-  for(let i=0;i<BID_ROWS.length;i++){
-    const p=parseFloat($('bp'+i).value);
-    if(isFinite(p)&&p>0)bids.push({stone_pk:BID_ROWS[i].id,bid_per_ct:p});
+  window.addEventListener('load', function(){ setTimeout(hidePre, reduce ? 0 : 1500); });
+  setTimeout(hidePre, 4000); /* safety net if load never fires */
+
+  /* ---- split text into masked words ---- */
+  document.querySelectorAll('[data-split]').forEach(function(el){
+    var words = el.textContent.trim().split(/\s+/);
+    el.textContent = '';
+    words.forEach(function(word, i){
+      var span = document.createElement('span');
+      span.className = 'w';
+      var inner = document.createElement('i');
+      inner.textContent = word;
+      inner.style.transitionDelay = (i * 0.055) + 's';
+      span.appendChild(inner);
+      el.appendChild(span);
+      if(i < words.length - 1) el.appendChild(document.createTextNode(' '));
+    });
+  });
+
+  /* ---- reveal on scroll ---- */
+  var targets = document.querySelectorAll('.rv, .rv-b, .split');
+  if(!('IntersectionObserver' in window) || reduce){
+    targets.forEach(function(t){ t.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+          /* once revealed, drop the per-word delay so hover responds instantly */
+          if(e.target.classList.contains('split')){
+            var inners = e.target.querySelectorAll('.w i');
+            setTimeout(function(){
+              inners.forEach(function(n){ n.style.transitionDelay = '0s'; });
+            }, 1100 + inners.length * 55);
+          }
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    targets.forEach(function(t){ io.observe(t); });
   }
-  if(!bids.length){$('bidErr').textContent='Enter a bid price for at least one stone.';return}
-  $('placeBidBtn').disabled=true;
-  try{
-    await api('/api/bids',{method:'POST',body:JSON.stringify({bids})});
-    closeBid();CHECKED.clear();await loadBidsOnly();
-    toast(`✓ ${bids.length} bid${bids.length>1?'s':''} placed`);
-  }catch(e){$('bidErr').textContent=e.message}
-  $('placeBidBtn').disabled=false;
-}
-async function delBid(stonePk){
-  if(!confirm('Remove your bid on this stone?'))return;
-  try{await api('/api/bids/'+stonePk,{method:'DELETE'});await loadBidsOnly();toast('Bid removed')}catch(e){toast(e.message,'bad')}
-}
 
-/* ---------- stone detail ---------- */
-function openDetail(id){
-  const s=getStone(id);if(!s)return;
-  $('dTitle').textContent=`${s.stone_id} — ${s.shape} ${fmt(s.cts)}ct ${s.color} ${s.clarity}`;
-  const links=[];
-  if(s.product_url)links.push(`<a href="${esc(s.product_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">Open Stone Page ↗</button></a>`);
-  if(s.video_url)links.push(`<a href="${esc(s.video_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">Video ↗</button></a>`);
-  if(s.cert_url)links.push(`<a href="${esc(s.cert_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">${esc(s.lab||'Lab')} Certificate ↗</button></a>`);
-  $('dLinks').innerHTML=links.join('');
-  const media=s.video_url||s.product_url;
-  $('dMedia').innerHTML=media
-    ?`<iframe src="${esc(media)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer"></iframe>
-      <div style="font-size:12px;color:var(--mut);margin-top:6px">If the preview doesn't load, use the "Open Stone Page" button above.</div>`
-    :'<div class="empty">No media link for this stone.</div>';
-  let details={};try{details=JSON.parse(s.details_json||'{}')}catch(e){}
-  $('dSpecs').innerHTML=Object.entries(details).map(([k,v])=>
-    `<div class="row"><div class="k">${esc(k)}</div><div><b>${esc(v)}</b></div></div>`).join('');
-  $('dBidBtn').onclick=()=>{closeDetail();openBidModal([s])};
-  $('dBidBtn').style.display=isOpen()?'':'none';
-  $('detailOverlay').classList.remove('hidden');
-}
-function closeDetail(){$('detailOverlay').classList.add('hidden');$('dMedia').innerHTML=''}
+  /* ---- scroll progress + sticky nav + hero parallax ---- */
+  var prog = document.getElementById('prog');
+  var nav = document.getElementById('nav');
+  var heroInner = document.getElementById('heroInner');
+  var diaWrap = document.getElementById('diaWrap');
+  var ticking = false;
 
-/* ---------- boot ---------- */
-(async()=>{
-  try{
-    const j=await api('/api/me');
-    if(j.client){ME=j.client;enterApp()}
-  }catch(e){}
+  function onScroll(){
+    var y = window.pageYOffset || document.documentElement.scrollTop;
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    if(prog) prog.style.width = (max > 0 ? (y / max) * 100 : 0) + '%';
+    if(nav) nav.classList.toggle('stuck', y > 60);
+    if(!reduce && heroInner && y < window.innerHeight * 1.2){
+      heroInner.style.transform = 'translateY(' + (y * 0.16) + 'px)';
+      heroInner.style.opacity = Math.max(0, 1 - y / (window.innerHeight * 0.72));
+      if(diaWrap) diaWrap.style.transform = 'translate(-50%,-50%) translateY(' + (y * -0.07) + 'px) scale(' + (1 + y / 5200) + ')';
+    }
+    ticking = false;
+  }
+  window.addEventListener('scroll', function(){
+    if(!ticking){ ticking = true; window.requestAnimationFrame(onScroll); }
+  }, { passive: true });
+  onScroll();
+
+  /* ---- custom cursor + pointer parallax (desktop only) ---- */
+  var fine = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
+  if(fine && !reduce){
+    var dot = document.getElementById('cur');
+    var ring = document.getElementById('curR');
+    var mx = window.innerWidth / 2, my = window.innerHeight / 2;
+    var rx = mx, ry = my;
+    var px = 0, py = 0, tpx = 0, tpy = 0;
+
+    window.addEventListener('mousemove', function(e){
+      mx = e.clientX; my = e.clientY;
+      tpx = (e.clientX / window.innerWidth - 0.5) * 26;
+      tpy = (e.clientY / window.innerHeight - 0.5) * 26;
+    }, { passive: true });
+
+    if(ring){
+      document.querySelectorAll('[data-cur]').forEach(function(el){
+        el.addEventListener('mouseenter', function(){ ring.classList.add('big'); });
+        el.addEventListener('mouseleave', function(){ ring.classList.remove('big'); });
+      });
+    }
+
+    (function loop(){
+      rx += (mx - rx) * 0.14;
+      ry += (my - ry) * 0.14;
+      if(dot) dot.style.transform = 'translate(' + mx + 'px,' + my + 'px)';
+      if(ring) ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px)';
+      px += (tpx - px) * 0.06;
+      py += (tpy - py) * 0.06;
+      var svg = diaWrap ? diaWrap.querySelector('.dia') : null;
+      if(svg){ svg.style.marginLeft = px + 'px'; svg.style.marginTop = py + 'px'; }
+      requestAnimationFrame(loop);
+    })();
+  }
 })();
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeBid();closeDetail()}
-  if(e.key==='Enter'&&!$('loginView').classList.contains('hidden'))doLogin();
-});
 </script>
+
 </body>
 </html>

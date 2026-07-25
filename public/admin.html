@@ -103,7 +103,8 @@ tr:hover td{background:#f2fafc}
       <div class="mut">Uploading a new stocklist starts a fresh event and closes any currently live event (its bids stay stored and exportable). Required columns: STONE ID and CTS — everything else (color, clarity, rap, disc, links…) is picked up automatically. Hyperlinks on STONE ID and REPORT NO. are captured for the stone page / certificate.</div>
       <div class="err" id="createErr"></div>
       <button class="btn-main" id="createBtn" onclick="createBidEvent()" style="margin-top:6px">Upload &amp; Go Live</button>
-      <div class="linkbox"><span class="mut">Share with clients:</span><code id="shareLink"></code><button class="btn-ghost" onclick="copyLink()">Copy</button></div>
+      <div class="linkbox"><span class="mut">Main site:</span><code id="shareLink"></code><button class="btn-ghost" onclick="copyLink()">Copy</button></div>
+      <div class="linkbox"><span class="mut">Direct to bidding:</span><code id="portalLink"></code><button class="btn-ghost" onclick="copyPortalLink()">Copy</button></div>
     </div>
 
     <div class="card">
@@ -164,9 +165,11 @@ async function logout(){await api('/api/logout',{method:'POST',body:JSON.stringi
 function enterApp(){
   $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');
   $('shareLink').textContent=location.origin+'/';
+  $('portalLink').textContent=location.origin+'/portal';
   loadEvents();loadClients();
 }
-function copyLink(){navigator.clipboard.writeText(location.origin+'/').then(()=>toast('Link copied'))}
+function copyLink(){navigator.clipboard.writeText(location.origin+'/').then(()=>toast('Main site link copied'))}
+function copyPortalLink(){navigator.clipboard.writeText(location.origin+'/portal').then(()=>toast('Bidding link copied'))}
 
 async function createBidEvent(){
   $('createErr').textContent='';

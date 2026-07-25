@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS bids (
 );
 `);
 try { db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT'); } catch (e) { /* column already exists */ }
+try { db.exec('ALTER TABLE events ADD COLUMN headers_json TEXT'); } catch (e) { /* column already exists */ }
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -247,6 +248,13 @@ app.post('/api/bids', requireClient, (req, res) => {
       const amount = round2(perCt * stone.cts);
       let disc = null;
       if (stone.rap && stone.rap > 0) disc = round2((1 - perCt / stone.rap) * 100);
+      /* Bids must be on the expensive side: discount no higher than the ask discount.
+         Enforced here as well as in the browser so it cannot be bypassed. */
+      if (stone.disc != null && disc != null && disc > stone.disc + 0.001) {
+        throw new Error('Bid on ' + stone.stone_id + ' is at ' + disc.toFixed(2) +
+          '% discount, which is below the asking price. Maximum allowed discount is ' +
+          Number(stone.disc).toFixed(2) + '%.');
+      }
       const now = Date.now();
       upsert.run(ev.id, stone.id, req.client.id, disc, round2(perCt), amount, now, now);
       saved++;
@@ -333,13 +341,16 @@ function parseStocklist(buffer) {
     const L = num(idx.length), W = num(idx.width), Ht = num(idx.height);
     const meas = (L && W && Ht) ? (L + '*' + W + '*' + Ht) : '';
 
+    /* Keep every column from the source file, in its original order, so the
+       client download can reproduce the stocklist format exactly. 'NONE' is a
+       real grading value and is preserved; only truly blank cells are skipped. */
     const details = {};
     for (let c = range.s.c; c <= range.e.c; c++) {
       const h = headers[c - range.s.c];
       if (!h) continue;
       const cell = ws[XLSX.utils.encode_cell({ r, c })];
       const v = cell ? cell.v : null;
-      if (v !== null && v !== undefined && String(v).trim() !== '' && String(v).trim() !== 'NONE') {
+      if (v !== null && v !== undefined && String(v).trim() !== '') {
         details[h] = v;
       }
     }
@@ -360,6 +371,9 @@ function parseStocklist(buffer) {
     });
   }
   if (!stones.length) throw new Error('No valid stone rows found in the file.');
+  /* keep the source column order so downloads can reproduce the exact format,
+     including columns that happen to be empty for every row */
+  stones.sourceHeaders = headers.filter(h => h && String(h).trim() !== '');
   return stones;
 }
 
@@ -380,8 +394,8 @@ app.post('/api/admin/events', requireAdmin, upload.single('file'), (req, res) =>
     );
     const tx = db.transaction(() => {
       db.exec("UPDATE events SET status = 'closed' WHERE status = 'live'");
-      const info = db.prepare("INSERT INTO events (name, terms, end_time, status, created_at) VALUES (?,?,?,'live',?)")
-        .run(name, terms, endTime, Date.now());
+      const info = db.prepare("INSERT INTO events (name, terms, end_time, status, created_at, headers_json) VALUES (?,?,?,'live',?,?)")
+        .run(name, terms, endTime, Date.now(), JSON.stringify(stones.sourceHeaders || []));
       const evId = Number(info.lastInsertRowid);
       for (const s of stones) {
         ins.run(evId, s.stone_id, s.location, s.shape, s.cts, s.color, s.clarity, s.cut, s.pol, s.symm, s.fluor,
@@ -453,6 +467,112 @@ app.get('/api/admin/clients', requireAdmin, (req, res) => {
     '(SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids ' +
     'FROM clients c ORDER BY c.created_at DESC').all();
   res.json({ clients });
+});
+
+/* ---------------- admin: bids bifurcated company-wise ---------------- */
+app.get('/api/admin/events/:id/export-by-company', requireAdmin, async (req, res) => {
+  const ev = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
+  if (!ev) return res.status(404).json({ error: 'Event not found.' });
+
+  const rows = db.prepare(
+    'SELECT b.bid_disc, b.bid_per_ct, b.bid_amount, b.updated_at, ' +
+    'c.company, c.name AS person, c.contact, ' +
+    's.details_json, s.stone_id, s.cts, s.disc AS ask_disc, s.price_ct AS ask_ct, s.rap ' +
+    'FROM bids b JOIN clients c ON c.id = b.client_id JOIN stones s ON s.id = b.stone_pk ' +
+    'WHERE b.event_id = ? ORDER BY c.company COLLATE NOCASE, s.cts DESC').all(ev.id);
+
+  /* group by company name (case/space-insensitive), merging multiple contacts */
+  const groups = new Map();
+  for (const r of rows) {
+    const key = String(r.company || 'Unknown').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!groups.has(key)) groups.set(key, { company: String(r.company || 'Unknown').trim(), rows: [], people: new Map() });
+    const g = groups.get(key);
+    g.rows.push(r);
+    if (!g.people.has(r.contact)) g.people.set(r.contact, r.person);
+  }
+
+  const base = stocklistHeaders(ev.id);
+  const headers = base.concat(['BID DISC%', 'BID $/CT', 'BID AMOUNT $', 'BID PLACED / UPDATED', 'BIDDER', 'BIDDER CONTACT']);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'K.Girdharlal Bidding Portal';
+
+  /* ---- sheet 1: summary ---- */
+  const sum = wb.addWorksheet('Summary');
+  const sumHead = ['COMPANY', 'CONTACT PERSON(S)', 'EMAIL / MOBILE', 'STONES BID', 'TOTAL CTS', 'TOTAL BID AMOUNT $', 'AVG BID $/CT', 'LAST ACTIVITY'];
+  sum.columns = [{ width: 34 }, { width: 26 }, { width: 34 }, { width: 12 }, { width: 11 }, { width: 20 }, { width: 14 }, { width: 22 }];
+  sum.addRow(sumHead);
+
+  const ordered = [...groups.values()].sort((a, b) =>
+    b.rows.reduce((s, r) => s + r.bid_amount, 0) - a.rows.reduce((s, r) => s + r.bid_amount, 0));
+
+  let grandAmt = 0, grandStones = 0;
+  for (const g of ordered) {
+    const amt = g.rows.reduce((s, r) => s + r.bid_amount, 0);
+    const cts = g.rows.reduce((s, r) => s + (r.cts || 0), 0);
+    const last = Math.max(...g.rows.map(r => r.updated_at));
+    grandAmt += amt; grandStones += g.rows.length;
+    sum.addRow([
+      g.company, [...g.people.values()].join(', '), [...g.people.keys()].join(', '),
+      g.rows.length, round2(cts), round2(amt), cts ? round2(amt / cts) : '',
+      new Date(last).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+    ]);
+  }
+  const gt = sum.addRow(['GRAND TOTAL', '', '', grandStones, '', round2(grandAmt), '', '']);
+  gt.font = { bold: true };
+  gt.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F6FA' } };
+  styleHeader(sum, sumHead.length);
+  sum.getRow(1).getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF188A52' } };
+  sum.spliceRows(1, 0, ['Bids by Company — ' + ev.name]);
+  sum.getRow(1).font = { bold: true, size: 13 };
+  sum.mergeCells(1, 1, 1, sumHead.length);
+
+  /* ---- one sheet per company ---- */
+  const used = new Set(['Summary']);
+  for (const g of ordered) {
+    let nm = (g.company || 'Unknown').replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || 'Company';
+    let base2 = nm, k = 2;
+    while (used.has(nm)) { nm = (base2.slice(0, 25) + ' ' + k++).trim(); }
+    used.add(nm);
+
+    const ws = wb.addWorksheet(nm);
+    sizeCols(ws, headers);
+    ws.addRow(headers);
+    let amt = 0, cts = 0;
+    for (const r of g.rows) {
+      let d = {};
+      try { d = JSON.parse(r.details_json || '{}'); } catch (e) { d = {}; }
+      const line = base.map(h => clean(d[h]));
+      line.push(
+        r.bid_disc == null ? '' : round2(r.bid_disc),
+        round2(r.bid_per_ct),
+        round2(r.bid_amount),
+        new Date(r.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        r.person, r.contact
+      );
+      ws.addRow(line);
+      amt += r.bid_amount; cts += r.cts || 0;
+    }
+    const tRow = new Array(headers.length).fill('');
+    tRow[0] = 'TOTAL — ' + g.rows.length + ' stone' + (g.rows.length === 1 ? '' : 's');
+    const ci = base.indexOf('CTS');
+    if (ci !== -1) tRow[ci] = round2(cts);
+    tRow[headers.length - 4] = round2(amt);
+    const tr = ws.addRow(tRow);
+    tr.font = { bold: true };
+    tr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F6FA' } };
+    styleHeader(ws, headers.length);
+  }
+
+  if (!ordered.length) {
+    const ws = wb.addWorksheet('No Bids');
+    ws.addRow(['No bids have been placed for this event yet.']);
+  }
+
+  const fname = 'BidsByCompany_' + ev.name.replace(/[^a-zA-Z0-9-_]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 /* ---------------- admin: full database backup ---------------- */
@@ -547,43 +667,104 @@ app.post('/api/admin/events/:id/email-bids', requireAdmin, async (req, res) => {
 });
 
 /* ---------------- client: download own bids as Excel ---------------- */
+/* ---------------- stocklist-format export helpers ---------------- */
+/* Rebuild the original stocklist column order for an event from the stored
+   per-stone detail objects (insertion order preserved from the upload). */
+function stocklistHeaders(eventId) {
+  /* preferred: the exact header row captured at upload (covers columns that are
+     empty in every row, e.g. "DOR rough no") */
+  const ev = db.prepare('SELECT headers_json FROM events WHERE id = ?').get(eventId);
+  if (ev && ev.headers_json) {
+    try {
+      const h = JSON.parse(ev.headers_json);
+      if (Array.isArray(h) && h.length) return h;
+    } catch (e) { /* fall through to derivation below */ }
+  }
+  /* fallback for events uploaded before headers were recorded */
+  const rows = db.prepare('SELECT details_json FROM stones WHERE event_id = ?').all(eventId);
+  const seen = new Set();
+  const order = [];
+  for (const r of rows) {
+    let d = {};
+    try { d = JSON.parse(r.details_json || '{}'); } catch (e) { d = {}; }
+    for (const k of Object.keys(d)) {
+      if (!seen.has(k)) { seen.add(k); order.push(k); }
+    }
+  }
+  return order;
+}
+/* Excel arithmetic leaves float noise (31043.789999999997) — tidy it for display */
+function clean(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (typeof v === 'number' || (isFinite(n) && String(v).trim() !== '' && !isNaN(n))) {
+    return Math.abs(n - Math.round(n)) < 1e-9 ? Math.round(n) : Number(n.toFixed(4));
+  }
+  return v;
+}
+const BID_COLS = ['MY BID DISC%', 'MY BID $/CT', 'MY BID AMOUNT $', 'BID PLACED / UPDATED'];
+function styleHeader(ws, n) {
+  const h = ws.getRow(1);
+  h.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+  h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10A6C2' } };
+  h.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  h.height = 26;
+  /* highlight the appended bid columns in a second accent */
+  for (let c = n - BID_COLS.length + 1; c <= n; c++) {
+    h.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF188A52' } };
+  }
+  ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: n } };
+}
+function sizeCols(ws, headers) {
+  ws.columns = headers.map(h => ({
+    width: Math.min(30, Math.max(10, String(h).length + 3))
+  }));
+}
+
 app.get('/api/my-bids/export', requireClient, async (req, res) => {
   const ev = activeEvent();
   if (!ev) return res.status(400).json({ error: 'No live event.' });
   const rows = db.prepare(
-    'SELECT b.*, s.stone_id, s.shape, s.cts, s.color, s.clarity, s.cut, s.pol, s.symm, s.fluor, ' +
-    's.measurements, s.rap, s.disc AS adisc, s.price_ct AS act, s.lab, s.report_no ' +
+    'SELECT b.bid_disc, b.bid_per_ct, b.bid_amount, b.updated_at, s.details_json, s.cts ' +
     'FROM bids b JOIN stones s ON s.id = b.stone_pk ' +
     'WHERE b.event_id = ? AND b.client_id = ? ORDER BY s.cts DESC').all(ev.id, req.client.id);
+
+  const base = stocklistHeaders(ev.id);
+  const headers = base.concat(BID_COLS);
   const wb = new ExcelJS.Workbook();
+  wb.creator = 'K.Girdharlal Bidding Portal';
   const ws = wb.addWorksheet('My Bids');
-  ws.columns = [
-    { header: 'Stone ID', key: 'sid', width: 14 }, { header: 'Shape', key: 'sh', width: 9 },
-    { header: 'Cts', key: 'cts', width: 8 }, { header: 'Col', key: 'col', width: 6 },
-    { header: 'Cla', key: 'cla', width: 7 }, { header: 'Cut/Pol/Sym', key: 'cps', width: 12 },
-    { header: 'Fluor', key: 'flo', width: 9 }, { header: 'Measurements', key: 'meas', width: 16 },
-    { header: 'Lab', key: 'lab', width: 7 }, { header: 'Report No.', key: 'rep', width: 14 },
-    { header: 'Rap', key: 'rap', width: 10 }, { header: 'Ask Disc%', key: 'ad', width: 10 },
-    { header: 'Ask $/Ct', key: 'ac', width: 10 }, { header: 'My Bid Disc%', key: 'bd', width: 12 },
-    { header: 'My Bid $/Ct', key: 'bp', width: 11 }, { header: 'My Bid Amount $', key: 'ba', width: 14 },
-    { header: 'Placed / Updated', key: 'ts', width: 22 }
-  ];
-  let total = 0;
+  sizeCols(ws, headers);
+  ws.addRow(headers);
+
+  let total = 0, totalCts = 0;
   for (const r of rows) {
+    let d = {};
+    try { d = JSON.parse(r.details_json || '{}'); } catch (e) { d = {}; }
+    const line = base.map(h => clean(d[h]));
+    line.push(
+      r.bid_disc == null ? '' : round2(r.bid_disc),
+      round2(r.bid_per_ct),
+      round2(r.bid_amount),
+      new Date(r.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+    );
+    ws.addRow(line);
     total += r.bid_amount;
-    ws.addRow({
-      sid: r.stone_id, sh: r.shape, cts: r.cts, col: r.color, cla: r.clarity,
-      cps: [r.cut, r.pol, r.symm].filter(Boolean).join('-'), flo: r.fluor, meas: r.measurements,
-      lab: r.lab, rep: r.report_no, rap: r.rap, ad: r.adisc, ac: r.act,
-      bd: r.bid_disc, bp: r.bid_per_ct, ba: r.bid_amount,
-      ts: new Date(r.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-    });
+    totalCts += r.cts || 0;
   }
-  const tr = ws.addRow({ sid: 'TOTAL', ba: round2(total) });
+
+  /* totals row under the bid columns */
+  const tRow = new Array(headers.length).fill('');
+  tRow[0] = 'TOTAL — ' + rows.length + ' stone' + (rows.length === 1 ? '' : 's');
+  const ctsIdx = base.indexOf('CTS');
+  if (ctsIdx !== -1) tRow[ctsIdx] = round2(totalCts);
+  tRow[headers.length - 2] = round2(total);
+  const tr = ws.addRow(tRow);
   tr.font = { bold: true };
-  ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10A6C2' } };
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  tr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F6FA' } };
+
+  styleHeader(ws, headers.length);
   const fname = 'MyBids_' + ev.name.replace(/[^a-zA-Z0-9-_]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');

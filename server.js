@@ -186,6 +186,7 @@ app.get('/api/me', (req, res) => {
   const s = getSession(req);
   if (!s) return res.json({ client: null, admin: false });
   const client = s.client_id ? db.prepare('SELECT * FROM clients WHERE id = ?').get(s.client_id) : null;
+  if (client) delete client.password_hash; /* never send the stored hash to the browser */
   res.json({ client: client || null, admin: !!s.is_admin });
 });
 
@@ -441,12 +442,15 @@ app.get('/api/admin/events/:id/clients/:clientId/bids', requireAdmin, (req, res)
     'WHERE b.event_id = ? AND b.client_id = ? ORDER BY s.cts DESC')
     .all(Number(req.params.id), Number(req.params.clientId));
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(req.params.clientId));
+  if (client) delete client.password_hash;
   res.json({ client, bids });
 });
 
 app.get('/api/admin/clients', requireAdmin, (req, res) => {
   const clients = db.prepare(
-    'SELECT c.*, (SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids ' +
+    'SELECT c.id, c.name, c.company, c.contact, c.created_at, ' +
+    'CASE WHEN c.password_hash IS NULL THEN 0 ELSE 1 END AS has_password, ' +
+    '(SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids ' +
     'FROM clients c ORDER BY c.created_at DESC').all();
   res.json({ clients });
 });
@@ -721,6 +725,9 @@ app.get('/api/admin/events/:id/export', requireAdmin, async (req, res) => {
 
 /* ---------------- pages ---------------- */
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+/* public landing page */
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+/* the bidding portal itself (clients reach this via "Enter Portal") */
+app.get('/portal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'portal.html')));
 
 app.listen(PORT, () => console.log('KG Bidding running on port ' + PORT));

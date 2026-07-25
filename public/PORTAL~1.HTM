@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K.GIRDHARLAL — Bidding</title>
+<style>
+:root{
+  --teal:#10A6C2; --teal-d:#0C87A0; --teal-bg:#E6F6FA;
+  --ink:#1b2437; --bg:#f7fafb; --card:#fff; --line:#e3eaee; --mut:#66788a;
+  --green:#188a52; --red:#d13438; --amber:#b7791f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.45 'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}
+button{font:inherit;cursor:pointer;border:none;border-radius:999px}
+input,select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:8px 12px;outline:none;background:#fff}
+input:focus,select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(16,166,194,.14)}
+.hidden{display:none!important}
+.logo-svg{display:block}
+
+/* ---------- login ---------- */
+#loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#f2fafc 0%,#e6f4f8 60%,#d8eef4 100%)}
+.login-card{background:#fff;border-radius:18px;padding:40px 38px;width:410px;max-width:92vw;box-shadow:0 18px 50px rgba(12,60,80,.14);border:1px solid var(--line)}
+.login-card .lg{margin:0 auto 20px;display:flex;justify-content:center}
+.login-card h1{font-size:17px;color:var(--ink);text-align:center;font-weight:600;margin-bottom:4px}
+.login-card .sub{color:var(--mut);font-size:13px;margin-bottom:20px;text-align:center}
+.login-card label{display:block;font-size:11.5px;font-weight:600;color:var(--mut);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.6px}
+.login-card input{width:100%}
+.login-card .btn-main{width:100%;margin-top:24px}
+.err{color:var(--red);font-size:13px;margin-top:12px;min-height:18px}
+
+.btn-main{background:var(--teal);color:#fff;padding:11px 22px;font-weight:600;transition:.15s}
+.btn-main:hover{background:var(--teal-d)}
+.btn-main:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);padding:9px 18px;font-weight:600}
+.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
+.btn-sm{padding:7px 15px;font-size:13px}
+
+/* ---------- app shell ---------- */
+header.app{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:0 20px;height:60px;box-shadow:0 1px 6px rgba(20,60,80,.05)}
+header.app .evname{font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line);padding-left:16px}
+.countdown{margin-left:auto;background:var(--teal-bg);border:1px solid #c4e8f1;color:#0b7d95;padding:7px 16px;border-radius:999px;font-weight:700;font-size:13px;white-space:nowrap}
+.countdown b{font-variant-numeric:tabular-nums;color:#086377}
+.countdown.over{background:#fdecea;border-color:#f5c6c4;color:var(--red)}
+.countdown.over b{color:var(--red)}
+.userchip{font-size:13px;color:var(--mut);white-space:nowrap}
+.userchip b{color:var(--ink)}
+
+/* ---------- toolbar ---------- */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 20px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:60px;z-index:30}
+.toolbar input[type=search]{width:230px;border-radius:999px}
+.toolbar select{border-radius:999px}
+.tabs{display:flex;background:var(--bg);border-radius:999px;padding:3px;border:1px solid var(--line)}
+.tabs button{background:transparent;padding:7px 18px;font-weight:600;color:var(--mut)}
+.tabs button.on{background:var(--teal);color:#fff}
+.count-pill{background:var(--teal-bg);border:1px solid #c4e8f1;border-radius:999px;padding:5px 14px;font-size:12.5px;color:#0b7d95;font-weight:600}
+.toolbar .spacer{flex:1}
+.btn-excel{background:#fff;border:1.5px solid var(--green);color:var(--green);padding:8px 16px;font-weight:600;font-size:13px}
+.btn-excel:hover{background:#e7f6ee}
+
+/* ---------- table ---------- */
+.wrap{padding:16px 20px 120px}
+.tbl-card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:auto;box-shadow:0 1px 5px rgba(20,60,80,.05)}
+table{border-collapse:collapse;width:100%;min-width:1200px}
+thead th{background:#f4fafc;color:#4a6472;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;padding:11px 10px;text-align:left;border-bottom:2px solid #d8ecf2;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
+thead th.nosort{cursor:default}
+thead th .arr{color:var(--teal);font-size:10px}
+tbody td{padding:11px 10px;border-bottom:1px solid #eef4f6;white-space:nowrap;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:#f2fafc}
+tbody tr.hasbid{background:#f2fbf6}
+tbody tr.hasbid:hover{background:#e9f7ef}
+.sid{color:var(--teal);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.disc-red{color:var(--red);font-weight:600}
+.pricect{color:var(--amber);font-weight:700}
+.mybid{color:var(--green);font-weight:700}
+.lab-tag{background:var(--teal-bg);border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:700;color:#0b7d95}
+.bid-btn{background:var(--teal);color:#fff;padding:7px 18px;font-weight:600;font-size:13px}
+.bid-btn:hover{background:var(--teal-d)}
+.bid-btn.edit{background:var(--green)}
+.del-bid{background:#fdecea;color:var(--red);font-size:11.5px;font-weight:700;margin-left:8px;padding:4px 10px;border:1px solid #f5c6c4}
+.del-bid:hover{background:var(--red);color:#fff}
+
+/* ---------- bottom bar ---------- */
+.bottombar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 18px rgba(20,60,80,.07);display:flex;align-items:center;gap:22px;padding:12px 22px;z-index:35;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+.stat .v{font-weight:700;font-size:15px;color:var(--ink)}
+.bottombar .spacer{flex:1}
+.terms{font-size:12px;color:var(--mut);max-width:340px}
+
+/* ---------- modals ---------- */
+.overlay{position:fixed;inset:0;background:rgba:10,40,55,.5;background:rgba(10,40,55,.5);z-index:60;display:flex;align-items:center;justify-content:center;padding:18px}
+.modal{background:#fff;border-radius:16px;max-width:1060px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,20,30,.35)}
+.modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line)}
+.modal-h h2{font-size:17px;color:var(--ink)}
+.modal-x{background:none;font-size:22px;color:var(--mut);line-height:1}
+.modal-b{padding:18px 22px;overflow:auto}
+.modal-f{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;align-items:center}
+.bid-note{font-size:12.5px;color:#0b7d95;background:var(--teal-bg);border:1px solid #c4e8f1;border-radius:10px;padding:10px 14px;margin-bottom:14px}
+table.bidtbl{min-width:860px}
+table.bidtbl input{width:96px;padding:7px 9px;text-align:right;border-radius:8px}
+table.bidtbl td{padding:9px 8px}
+.amt-cell{font-weight:700;color:var(--ink)}
+.modal .err{margin:0 auto 0 0}
+
+/* stone detail */
+.link-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+/* bid input validation state */
+input.input-bad{border-color:var(--red)!important;background:#fff6f5}
+input.input-bad:focus{box-shadow:0 0 0 3px rgba(209,52,56,.14)!important}
+.warn-row td{padding:0 8px 10px!important;border-bottom:none!important}
+.warn-msg{background:#fdecea;border:1px solid #f5c6c4;border-left:3px solid var(--red);color:#8f2226;
+  font-size:12.5px;border-radius:8px;padding:8px 12px}
+
+/* ---------- stone detail: media + spec cards ---------- */
+.d-wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:20px;align-items:start}
+.d-media{position:sticky;top:0}
+.media-tabs{display:flex;gap:6px;margin-bottom:10px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px;width:fit-content}
+.media-tabs button{background:transparent;border:none;border-radius:999px;padding:7px 16px;font:inherit;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer}
+.media-tabs button.on{background:var(--teal);color:#fff}
+.media-frame{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#f4fafc;height:430px}
+.media-frame iframe{width:100%;height:100%;border:none;display:block}
+.media-frame .fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;text-align:center;padding:26px;color:var(--mut);font-size:13px;background:#f4fafc}
+.media-hint{font-size:11.5px;color:var(--mut);margin-top:8px;text-align:center}
+
+.spec-col{display:grid;gap:12px}
+.spec-card{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.spec-card>h4{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);font-weight:700;
+  padding:10px 14px;background:#f7fbfc;border-bottom:1px solid var(--line)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:0}
+.kv>div{padding:8px 14px;font-size:13px;border-bottom:1px solid #f0f6f8}
+.kv>div:nth-child(odd){color:var(--mut);white-space:nowrap;padding-right:18px}
+.kv>div:nth-child(even){text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.kv>div:nth-last-child(1),.kv>div:nth-last-child(2){border-bottom:none}
+.kv .hi{color:var(--teal-d,#0b7d95)}
+
+/* headline price block, echoing the product page */
+.price-card{border:1px solid #c4e8f1;border-radius:14px;background:linear-gradient(160deg,#f2fbfd,var(--teal-bg));padding:16px 18px}
+.price-card .disc{font-size:26px;font-weight:700;color:#0b7d95;line-height:1.1;letter-spacing:-.3px}
+.price-card .disc small{font-size:12px;font-weight:600;color:var(--mut);letter-spacing:.4px;text-transform:uppercase}
+.price-card .pc{font-size:15px;font-weight:700;color:var(--amber);margin-top:6px}
+.price-card .tot{font-size:13.5px;color:var(--ink);margin-top:2px}
+
+/* your-bid panel */
+.mybid-card{border:1px solid #bfe6d2;border-radius:14px;background:linear-gradient(160deg,#f4fdf8,#e9f7ef);padding:14px 18px}
+.mybid-card h4{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:8px}
+.mybid-grid{display:flex;gap:22px;flex-wrap:wrap}
+.mybid-grid div span{display:block;font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+.mybid-grid div b{font-size:15.5px;color:var(--green);font-variant-numeric:tabular-nums}
+.mybid-card .when{font-size:11.5px;color:var(--mut);margin-top:8px}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px}
+.chip{font-size:11.5px;background:var(--teal-bg);border:1px solid #cfeaf1;color:#0b7d95;border-radius:999px;padding:4px 11px}
+.chip.warn{background:#fff8ec;border-color:#f3ddb5;color:#8a6216}
+.note-txt{padding:11px 14px;font-size:12.5px;color:var(--mut);line-height:1.6}
+
+@media(max-width:900px){
+  .d-wrap{grid-template-columns:1fr}
+  .d-media{position:static}
+  .media-frame{height:320px}
+}
+
+.toast{position:fixed;top:76px;right:20px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:12px;z-index:80;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.3);animation:fadein .2s}
+.toast.ok{background:var(--green)} .toast.bad{background:var(--red)}
+@keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+.empty{padding:60px 20px;text-align:center;color:var(--mut)}
+.closed-banner{background:#fdecea;color:var(--red);border-bottom:1px solid #f5c6c4;padding:10px 20px;text-align:center;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- shared logo template -->
+<template id="logoTpl">
+<svg class="logo-svg" viewBox="0 0 300 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="K.Girdharlal">
+  <path d="M25.4 3 L25.4 44 L3 44 C16 40 24 24 25.4 3 Z" fill="#14A8C4"/>
+  <path d="M28.6 3 L28.6 44 L51 44 C38 40 30 24 28.6 3 Z" fill="#14A8C4"/>
+  <text x="62" y="34" font-family="'Segoe UI',sans-serif" font-size="21" font-weight="600" letter-spacing="5" fill="#1b2437">K.GIRDHARLAL</text>
+  <rect x="62" y="41" width="212" height="2.4" fill="#14A8C4"/>
+  <text x="62" y="53" font-family="'Segoe UI',sans-serif" font-size="8" letter-spacing="2.6" fill="#5a6b7a">THERE'S MORE TO MAKING DIAMONDS</text>
+</svg>
+</template>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="lg" data-logo style="width:265px"></div>
+    <h1>Diamond Bidding</h1>
+    <div class="sub">Sign in to view stones &amp; place your bids</div>
+    <label>Your Name</label>
+    <input id="inName" placeholder="e.g. Jitu Patel" autocomplete="name">
+    <label>Company Name</label>
+    <input id="inCompany" placeholder="e.g. ABC Diamonds LLC" autocomplete="organization">
+    <label>Email or Mobile Number</label>
+    <input id="inContact" placeholder="you@company.com / +91 98xxxxxx" autocomplete="email">
+    <label>Password</label>
+    <input id="inPass" type="password" placeholder="Your password" autocomplete="current-password">
+    <div style="font-size:11.5px;color:var(--mut);margin-top:6px">First time here? Your account is created with this password &mdash; use the same one next time. Forgot it? Contact K.Girdharlal to reset.</div>
+    <div class="err" id="loginErr"></div>
+    <button class="btn-main" id="loginBtn" onclick="doLogin()">Enter Bidding Room →</button>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appView" class="hidden">
+  <header class="app">
+    <div data-logo style="width:215px"></div>
+    <div class="evname" id="evName"></div>
+    <div class="countdown" id="countdown">ENDS IN: <b>--:--:--</b></div>
+    <div class="userchip" id="userChip"></div>
+    <button class="btn-ghost btn-sm" onclick="logout()">Logout</button>
+  </header>
+
+  <div id="closedBanner" class="closed-banner hidden">Bidding for this event has ended. Bids can no longer be placed or changed.</div>
+
+  <div class="toolbar">
+    <div class="tabs">
+      <button id="tabAll" class="on" onclick="setTab('all')">All Stones</button>
+      <button id="tabMine" onclick="setTab('mine')">My Bids <span id="myBidCount"></span></button>
+    </div>
+    <input type="search" id="q" placeholder="Search stone ID, color, clarity…" oninput="render()">
+    <select id="fShape" onchange="render()"><option value="">Shape: All</option></select>
+    <select id="fColor" onchange="render()"><option value="">Color: All</option></select>
+    <select id="fClarity" onchange="render()"><option value="">Clarity: All</option></select>
+    <span class="count-pill" id="countPill"></span>
+    <div class="spacer"></div>
+    <button class="btn-excel" id="myExcelBtn" onclick="downloadMyBids()" style="display:none">⬇ My Bids Excel</button>
+    <button class="btn-main btn-sm" id="bidSelBtn" onclick="openBidModal(selected())" disabled>Bid Selected (0)</button>
+  </div>
+
+  <div class="wrap">
+    <div class="tbl-card">
+      <table id="tbl">
+        <thead><tr id="theadRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty hidden" id="emptyMsg">No stones match your filters.</div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="stat"><div class="l">My Bids</div><div class="v" id="sbCount">0</div></div>
+    <div class="stat"><div class="l">Total Cts</div><div class="v" id="sbCts">0.00</div></div>
+    <div class="stat"><div class="l">Avg Bid $/Ct</div><div class="v" id="sbAvg">0</div></div>
+    <div class="stat"><div class="l">Total Bid Amount</div><div class="v" id="sbAmt">$0</div></div>
+    <div class="spacer"></div>
+    <div class="terms" id="evTerms"></div>
+  </div>
+</div>
+
+<!-- ============ DISCLAIMER MODAL ============ -->
+<div class="overlay hidden" id="discOverlay" style="z-index:70">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-h"><h2>Bidding Terms &amp; Disclaimer</h2></div>
+    <div class="modal-b" style="font-size:13px">
+      <p style="color:var(--mut);margin-bottom:12px">Please read and accept the following terms before entering the bidding room:</p>
+      <ol style="padding-left:18px;display:grid;gap:10px">
+        <li><b>Bid Commitment.</b> All bids submitted are considered firm and binding. Once a bid is accepted by K.Girdharlal, the bidder is obligated to complete the purchase in accordance with the agreed terms and conditions.</li>
+        <li><b>Right to Accept or Reject Bids.</b> K.Girdharlal reserves the right to accept, reject, or cancel any bid, in whole or in part, at its sole discretion, without assigning any reason. Submission of the highest bid does not guarantee allocation of the goods.</li>
+        <li><b>Product Availability &amp; Errors.</b> All diamonds are subject to prior sale, availability, and verification. K.Girdharlal reserves the right to withdraw any item or correct any pricing, grading, inventory, or typographical errors at any time before order confirmation.</li>
+        <li><b>Confidentiality.</b> All stock details, prices, and bid information shared on this portal are strictly confidential and intended solely for the registered bidder. They may not be shared, forwarded, or disclosed to any third party without prior written consent of K.Girdharlal.</li>
+        <li><b>Payment &amp; Non-Payment.</b> Successful bidders must complete payment within the stipulated timeframe. Failure to do so may result in cancellation of the order, suspension of bidding privileges, or other actions deemed appropriate by K.Girdharlal.</li>
+      </ol>
+    </div>
+    <div class="modal-f">
+      <button class="btn-ghost" onclick="declineDisc()">Decline</button>
+      <button class="btn-main" onclick="acceptDisc()">I Agree &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BID MODAL ============ -->
+<div class="overlay hidden" id="bidOverlay">
+  <div class="modal">
+    <div class="modal-h"><h2>Place Bid</h2><button class="modal-x" onclick="closeBid()">×</button></div>
+    <div class="modal-b">
+      <div class="bid-note">Enter <b>Bid Disc%</b> <i>or</i> <b>Bid $/Ct</b> — the other is calculated automatically from the Rap rate. Amount = Bid $/Ct × Cts.<br>
+        Each field starts at the asking price. Bids must be at <b>the ask discount or lower</b> — a lower discount means a higher price. The arrows step by 0.25%. You can revise or remove your bid any time until the auction ends.</div>
+      <div style="overflow:auto">
+      <table class="bidtbl" id="bidTbl">
+        <thead><tr>
+          <th class="nosort">Stone ID</th><th class="nosort">Cts</th><th class="nosort">Col</th><th class="nosort">Cla</th>
+          <th class="nosort">Rap</th><th class="nosort">Ask Disc%</th><th class="nosort">Ask $/Ct</th>
+          <th class="nosort">Bid Disc%</th><th class="nosort">Bid $/Ct</th><th class="nosort">Bid Amount $</th>
+        </tr></thead>
+        <tbody id="bidTbody"></tbody>
+      </table>
+      </div>
+    </div>
+    <div class="modal-f">
+      <div class="err" id="bidErr"></div>
+      <button class="btn-ghost" onclick="closeBid()">Cancel</button>
+      <button class="btn-main" id="placeBidBtn" onclick="submitBids()">Place Bid</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STONE DETAIL MODAL ============ -->
+<div class="overlay hidden" id="detailOverlay">
+  <div class="modal">
+    <div class="modal-h"><h2 id="dTitle">Stone</h2><button class="modal-x" onclick="closeDetail()">×</button></div>
+    <div class="modal-b">
+      <div class="link-row" id="dLinks"></div>
+      <div class="d-wrap">
+        <div class="d-media">
+          <div class="media-tabs" id="dTabs"></div>
+          <div class="media-frame" id="dMedia"></div>
+          <div class="media-hint" id="dHint"></div>
+        </div>
+        <div class="spec-col" id="dSpecs"></div>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn-ghost" onclick="closeDetail()">Close</button>
+      <button class="btn-main" id="dBidBtn">Add Bid</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// stamp the logo everywhere
+document.querySelectorAll('[data-logo]').forEach(el=>{
+  el.appendChild(document.getElementById('logoTpl').content.cloneNode(true));
+});
+
+let ME=null, EV=null, STONES=[], MYBIDS={}, TAB='all', SORT={key:'cts',dir:-1}, TIME_OFF=0, CHECKED=new Set();
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>n==null?'-':Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt0=n=>n==null?'-':Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+
+async function api(url,opts={}){
+  const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||'Request failed');
+  return j;
+}
+function toast(msg,cls='ok'){
+  const t=document.createElement('div');t.className='toast '+cls;t.textContent=msg;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),2600);
+}
+
+/* ---------- login ---------- */
+async function doLogin(){
+  $('loginErr').textContent='';
+  $('loginBtn').disabled=true;
+  try{
+    const j=await api('/api/client-login',{method:'POST',body:JSON.stringify({
+      name:$('inName').value,company:$('inCompany').value,contact:$('inContact').value,password:$('inPass').value})});
+    ME=j.client; enterApp();
+  }catch(e){$('loginErr').textContent=e.message}
+  $('loginBtn').disabled=false;
+}
+async function logout(){await api('/api/logout',{method:'POST',body:JSON.stringify({kind:'c'})});location.reload()}
+
+/* ---------- app boot ---------- */
+function acceptDisc(){sessionStorage.setItem('kgDisc','1');$('discOverlay').classList.add('hidden')}
+async function declineDisc(){await logout()}
+async function enterApp(){
+  $('loginView').classList.add('hidden');
+  $('appView').classList.remove('hidden');
+  if(sessionStorage.getItem('kgDisc')!=='1')$('discOverlay').classList.remove('hidden');
+  $('userChip').innerHTML=`<b>${esc(ME.name)}</b> · ${esc(ME.company)}`;
+  await loadData();
+  setInterval(tick,1000);
+  setInterval(loadBidsOnly,30000);
+}
+async function loadData(){
+  const j=await api('/api/stones');
+  EV=j.event; STONES=j.stones||[];
+  TIME_OFF=j.server_time-Date.now();
+  if(!EV){$('evName').textContent='No live bidding event right now';$('tbody').innerHTML='';$('emptyMsg').textContent='No live bidding event at the moment. Please check back later.';$('emptyMsg').classList.remove('hidden');return}
+  $('evName').textContent=EV.name;
+  $('evTerms').textContent=EV.terms||'';
+  buildFilters(); await loadBidsOnly(); render();
+}
+async function loadBidsOnly(){
+  try{const j=await api('/api/my-bids');MYBIDS={};for(const b of j.bids)MYBIDS[b.stone_pk]=b;render()}catch(e){}
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function buildFilters(){
+  const fill=(id,vals,label)=>{const s=$(id);s.innerHTML=`<option value="">${label}: All</option>`+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${esc(v)}</option>`).join('')};
+  fill('fShape',STONES.map(s=>s.shape),'Shape');
+  fill('fColor',STONES.map(s=>s.color),'Color');
+  fill('fClarity',STONES.map(s=>s.clarity),'Clarity');
+}
+
+/* ---------- countdown ---------- */
+function now(){return Date.now()+TIME_OFF}
+function isOpen(){return EV&&EV.status==='live'&&now()<EV.end_time}
+function tick(){
+  if(!EV)return;
+  const el=$('countdown'),ms=EV.end_time-now();
+  if(ms<=0){el.innerHTML='ENDED';el.classList.add('over');$('closedBanner').classList.remove('hidden');return}
+  const d=Math.floor(ms/86400000),h=Math.floor(ms%86400000/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000);
+  const p=n=>String(n).padStart(2,'0');
+  el.innerHTML=`ENDS IN: <b>${d>0?d+'d ':''}${p(h)}:${p(m)}:${p(s)}</b>`;
+}
+
+/* ---------- table ---------- */
+const COLS=[
+  {key:'_chk',label:'',nosort:true},
+  {key:'stone_id',label:'Stone ID'},
+  {key:'shape',label:'Shape'},
+  {key:'cts',label:'Cts',num:true},
+  {key:'color',label:'Col'},
+  {key:'clarity',label:'Cla'},
+  {key:'_cps',label:'Cut·Pol·Sym',nosort:true},
+  {key:'fluor',label:'Fluor'},
+  {key:'measurements',label:'Measurements',nosort:true},
+  {key:'rap',label:'Rap',num:true},
+  {key:'disc',label:'Disc%',num:true},
+  {key:'price_ct',label:'$/Ct',num:true},
+  {key:'amount',label:'Amt $',num:true},
+  {key:'lab',label:'Lab'},
+  {key:'_mybid',label:'My Bid',nosort:true},
+  {key:'_act',label:'',nosort:true},
+];
+function setTab(t){TAB=t;$('tabAll').classList.toggle('on',t==='all');$('tabMine').classList.toggle('on',t==='mine');render()}
+function sortBy(key,num){
+  if(SORT.key===key)SORT.dir*=-1;else SORT={key,dir:num?-1:1};
+  render();
+}
+function filtered(){
+  const q=$('q').value.trim().toLowerCase(),sh=$('fShape').value,co=$('fColor').value,cl=$('fClarity').value;
+  let list=STONES.filter(s=>
+    (!sh||s.shape===sh)&&(!co||s.color===co)&&(!cl||s.clarity===cl)&&
+    (!q||[s.stone_id,s.color,s.clarity,s.shape,s.lab,s.report_no].join(' ').toLowerCase().includes(q)));
+  if(TAB==='mine')list=list.filter(s=>MYBIDS[s.id]);
+  const {key,dir}=SORT;
+  list.sort((a,b)=>{const x=a[key],y=b[key];
+    if(x==null)return 1;if(y==null)return -1;
+    return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*dir});
+  return list;
+}
+function selected(){return STONES.filter(s=>CHECKED.has(s.id))}
+function render(){
+  $('theadRow').innerHTML=COLS.map(c=>{
+    if(c.key==='_chk')return `<th class="nosort"><input type="checkbox" id="chkAll" onclick="toggleAll(this)"></th>`;
+    const arr=SORT.key===c.key?`<span class="arr">${SORT.dir>0?'▲':'▼'}</span>`:'';
+    return `<th ${c.nosort?'class="nosort"':`onclick="sortBy('${c.key}',${!!c.num})"`}>${c.label} ${arr}</th>`;
+  }).join('');
+  const list=filtered(),open=isOpen();
+  $('tbody').innerHTML=list.map(s=>{
+    const b=MYBIDS[s.id];
+    return `<tr class="${b?'hasbid':''}">
+      <td><input type="checkbox" ${CHECKED.has(s.id)?'checked':''} onclick="toggleChk(${s.id},this)"></td>
+      <td><span class="sid" onclick="openDetail(${s.id})">${esc(s.stone_id)}</span></td>
+      <td>${esc(s.shape)}</td>
+      <td><b>${fmt(s.cts)}</b></td>
+      <td>${esc(s.color)}</td>
+      <td>${esc(s.clarity)}</td>
+      <td>${[s.cut,s.pol,s.symm].filter(Boolean).join('·')||'-'}</td>
+      <td>${esc(s.fluor||'-')}</td>
+      <td>${esc(s.measurements||'-')}</td>
+      <td>${fmt0(s.rap)}</td>
+      <td class="disc-red">${s.disc==null?'-':fmt(s.disc)+'%'}</td>
+      <td class="pricect">${fmt0(s.price_ct)}</td>
+      <td>${fmt0(s.amount)}</td>
+      <td>${s.lab?`${s.cert_url?`<a href="${esc(s.cert_url)}" target="_blank" rel="noopener" style="text-decoration:none"><span class="lab-tag">${esc(s.lab)}</span></a>`:`<span class="lab-tag">${esc(s.lab)}</span>`}`:'-'}</td>
+      <td>${b?`<span class="mybid">${b.bid_disc==null?'':fmt(b.bid_disc)+'% · '}$${fmt0(b.bid_per_ct)}/ct</span>${open?`<button class="del-bid" onclick="delBid(${s.id})">✕ Remove</button>`:''}`:'-'}</td>
+      <td>${open?`<button class="bid-btn ${b?'edit':''}" onclick='openBidModal([getStone(${s.id})])'>${b?'Edit Bid':'Add Bid'}</button>`:''}</td>
+    </tr>`;
+  }).join('');
+  $('emptyMsg').classList.toggle('hidden',list.length>0);
+  $('countPill').textContent=`${list.length} of ${STONES.length} stones`;
+  const sel=selected();
+  $('bidSelBtn').textContent=`Bid Selected (${sel.length})`;
+  $('bidSelBtn').disabled=!sel.length||!open;
+  const bids=Object.values(MYBIDS);
+  $('myExcelBtn').style.display=bids.length?'':'none';
+  $('myBidCount').textContent=bids.length?`(${bids.length})`:'';
+  $('sbCount').textContent=bids.length;
+  const stById=Object.fromEntries(STONES.map(s=>[s.id,s]));
+  const cts=bids.reduce((a,b)=>a+(stById[b.stone_pk]?.cts||0),0);
+  const amt=bids.reduce((a,b)=>a+b.bid_amount,0);
+  $('sbCts').textContent=fmt(cts);
+  $('sbAvg').textContent=cts?('$'+fmt0(amt/cts)):'0';
+  $('sbAmt').textContent='$'+fmt0(amt);
+}
+function getStone(id){return STONES.find(s=>s.id===id)}
+function toggleChk(id,el){el.checked?CHECKED.add(id):CHECKED.delete(id);render()}
+function toggleAll(el){const list=filtered();CHECKED=el.checked?new Set(list.map(s=>s.id)):new Set();render()}
+function downloadMyBids(){location.href='/api/my-bids/export'}
+
+/* ---------- bid modal ---------- */
+let BID_ROWS=[];
+function openBidModal(stones){
+  if(!stones||!stones.length)return;
+  if(!isOpen()){toast('Bidding is closed','bad');return}
+  BID_ROWS=stones;
+  $('bidErr').textContent='';
+  $('bidTbody').innerHTML=stones.map((s,i)=>{
+    const b=MYBIDS[s.id];
+    return `<tr>
+      <td><b>${esc(s.stone_id)}</b></td><td>${fmt(s.cts)}</td><td>${esc(s.color)}</td><td>${esc(s.clarity)}</td>
+      <td>${fmt0(s.rap)}</td><td class="disc-red">${s.disc==null?'-':fmt(s.disc)+'%'}</td><td class="pricect">${fmt0(s.price_ct)}</td>
+      <td>${s.rap?`<input id="bd${i}" type="number" step="0.25" max="${s.disc==null?'':s.disc}" placeholder="Disc %" value="${b&&b.bid_disc!=null?b.bid_disc:(s.disc==null?'':s.disc)}" oninput="calcRow(${i},'disc')">`:'-'}</td>
+      <td><input id="bp${i}" type="number" step="1" min="${s.disc==null||!s.rap?'':(s.rap*(1-s.disc/100)).toFixed(2)}" placeholder="$/Ct" value="${b?b.bid_per_ct:(s.price_ct==null?'':s.price_ct)}" oninput="calcRow(${i},'price')"></td>
+      <td class="amt-cell" id="ba${i}">${b?fmt(b.bid_amount):(s.price_ct&&s.cts?fmt(s.price_ct*s.cts):'-')}</td>
+    </tr>
+    <tr id="warnRow${i}" class="warn-row hidden"><td colspan="10"><div class="warn-msg" id="warn${i}"></div></td></tr>`;
+  }).join('');
+  $('bidOverlay').classList.remove('hidden');
+  /* seed the amount cells from the pre-filled ask values */
+  for(let i=0;i<stones.length;i++)calcRow(i,'init');
+}
+/* A bid must be on the expensive side: discount no higher than the ask discount. */
+function bidTooCheap(s,disc){return s.disc!=null&&isFinite(disc)&&disc>s.disc+1e-9}
+function calcRow(i,src){
+  const s=BID_ROWS[i],bd=$('bd'+i),bp=$('bp'+i),ba=$('ba'+i);
+  if(src==='disc'&&s.rap&&bd){
+    const d=parseFloat(bd.value);
+    bp.value=isFinite(d)?(s.rap*(1-d/100)).toFixed(2):'';
+  }else if(src==='price'&&s.rap&&bd){
+    const p=parseFloat(bp.value);
+    bd.value=isFinite(p)?((1-p/s.rap)*100).toFixed(2):'';
+  }
+  const p=parseFloat(bp.value);
+  ba.textContent=isFinite(p)&&p>0?fmt(p*s.cts):'-';
+  /* live guidance */
+  const d=parseFloat(bd?bd.value:NaN);
+  const warnRow=$('warnRow'+i),warn=$('warn'+i);
+  const bad=bidTooCheap(s,d);
+  if(bd)bd.classList.toggle('input-bad',bad);
+  if(bp)bp.classList.toggle('input-bad',bad);
+  if(warnRow&&warn){
+    if(bad){
+      warn.innerHTML=`Bid must be at <b>${fmt(s.disc)}%</b> discount or lower for ${esc(s.stone_id)} — a higher discount means a lower price. Lower the discount (e.g. ${fmt(s.disc-0.25)}%) or raise the $/Ct.`;
+      warnRow.classList.remove('hidden');
+    }else{
+      warnRow.classList.add('hidden');
+    }
+  }
+  const anyBad=BID_ROWS.some((st,k)=>bidTooCheap(st,parseFloat(($('bd'+k)||{}).value)));
+  $('placeBidBtn').disabled=anyBad;
+}
+function closeBid(){$('bidOverlay').classList.add('hidden')}
+async function submitBids(){
+  const bids=[];
+  const blocked=[];
+  for(let i=0;i<BID_ROWS.length;i++){
+    const s=BID_ROWS[i];
+    const p=parseFloat($('bp'+i).value);
+    const d=parseFloat(($('bd'+i)||{}).value);
+    if(bidTooCheap(s,d)){blocked.push(`${s.stone_id} (max ${fmt(s.disc)}%)`);continue}
+    if(isFinite(p)&&p>0)bids.push({stone_pk:s.id,bid_per_ct:p});
+  }
+  if(blocked.length){
+    $('bidErr').textContent='Discount too high on: '+blocked.join(', ')+'. Bids must be on or below the ask discount.';
+    return;
+  }
+  if(!bids.length){$('bidErr').textContent='Enter a bid price for at least one stone.';return}
+  $('placeBidBtn').disabled=true;
+  try{
+    await api('/api/bids',{method:'POST',body:JSON.stringify({bids})});
+    closeBid();CHECKED.clear();await loadBidsOnly();
+    toast(`✓ ${bids.length} bid${bids.length>1?'s':''} placed`);
+  }catch(e){$('bidErr').textContent=e.message}
+  $('placeBidBtn').disabled=false;
+}
+async function delBid(stonePk){
+  if(!confirm('Remove your bid on this stone?'))return;
+  try{await api('/api/bids/'+stonePk,{method:'DELETE'});await loadBidsOnly();toast('Bid removed')}catch(e){toast(e.message,'bad')}
+}
+
+/* ---------- stone detail ---------- */
+let D_MEDIA=[];
+/* numbers arriving from Excel can carry float noise (83213.99999999999) — clean them up */
+function nv(v,d=2){
+  if(v==null||v==='')return null;
+  const n=Number(v);
+  if(!isFinite(n))return String(v);
+  return Number(n.toFixed(d));
+}
+function disp(v,d=2){
+  const n=nv(v,d);
+  return n==null?'-':(typeof n==='number'?n.toLocaleString('en-US',{maximumFractionDigits:d}):n);
+}
+function kvCard(title,pairs){
+  const rows=pairs.filter(p=>p[1]!=null&&p[1]!==''&&p[1]!=='-')
+    .map(([k,v,cls])=>`<div>${esc(k)}</div><div class="${cls||''}">${esc(v)}</div>`).join('');
+  return rows?`<div class="spec-card"><h4>${esc(title)}</h4><div class="kv">${rows}</div></div>`:'';
+}
+function showMedia(i){
+  const m=D_MEDIA[i];if(!m)return;
+  [...$('dTabs').children].forEach((b,k)=>b.classList.toggle('on',k===i));
+  $('dMedia').innerHTML=
+    `<iframe src="${esc(m.url)}" loading="lazy" allowfullscreen referrerpolicy="no-referrer"></iframe>
+     <div class="fallback" id="dFallback" style="display:none">
+       <div>This ${esc(m.label.toLowerCase())} can't be shown inside the page.</div>
+       <a href="${esc(m.url)}" target="_blank" rel="noopener"><button class="btn-main btn-sm">Open ${esc(m.label)} ↗</button></a>
+     </div>`;
+  $('dHint').textContent=m.hint||'';
+  /* some certificate hosts refuse embedding — surface a button if nothing renders */
+  const fr=$('dMedia').querySelector('iframe');
+  let loaded=false;
+  fr.addEventListener('load',()=>{loaded=true});
+  setTimeout(()=>{ if(!loaded){const f=$('dFallback'); if(f)f.style.display='flex';} },2600);
+}
+function openDetail(id){
+  const s=getStone(id);if(!s)return;
+  $('dTitle').textContent=`${s.stone_id} — ${s.shape} ${fmt(s.cts)}ct ${s.color} ${s.clarity}`;
+
+  /* ---- quick links ---- */
+  const links=[];
+  if(s.product_url)links.push(`<a href="${esc(s.product_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">Stone Page ↗</button></a>`);
+  if(s.cert_url)links.push(`<a href="${esc(s.cert_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">${esc(s.lab||'Lab')} Certificate ↗</button></a>`);
+  if(s.video_url)links.push(`<a href="${esc(s.video_url)}" target="_blank" rel="noopener"><button class="btn-ghost btn-sm">Video ↗</button></a>`);
+  $('dLinks').innerHTML=links.join('');
+
+  /* ---- media tabs: 360 view + certificate ---- */
+  D_MEDIA=[];
+  const view=s.video_url||s.product_url;
+  if(view)D_MEDIA.push({label:'360° View',url:view,hint:'Drag or use the controls to rotate the stone.'});
+  if(s.cert_url)D_MEDIA.push({label:(s.lab||'Lab')+' Certificate',url:s.cert_url,hint:'Official grading report for this stone.'});
+  if(D_MEDIA.length){
+    $('dTabs').innerHTML=D_MEDIA.map((m,i)=>`<button onclick="showMedia(${i})">${esc(m.label)}</button>`).join('');
+    $('dTabs').style.display=D_MEDIA.length>1?'':'none';
+    showMedia(0);
+  }else{
+    $('dTabs').innerHTML='';$('dTabs').style.display='none';
+    $('dMedia').innerHTML='<div class="fallback">No media link for this stone.</div>';
+    $('dHint').textContent='';
+  }
+
+  /* ---- specs, grouped ---- */
+  let D={};try{D=JSON.parse(s.details_json||'{}')}catch(e){}
+  const g=(...names)=>{for(const n of names){if(D[n]!=null&&String(D[n]).trim()!=='')return D[n]}return null};
+  const meas=(s.measurements||'').replace(/\*/g,' × ')
+    || [g('LENGTH'),g('WIDTH'),g('HEIGHT')].filter(v=>v!=null).map(v=>disp(v)).join(' × ');
+  const cards=[];
+
+  /* headline pricing */
+  const askAmt=nv(s.amount)!=null?nv(s.amount):(s.price_ct&&s.cts?nv(s.price_ct*s.cts):null);
+  cards.push(`<div class="price-card">
+    <div class="disc">${s.disc==null?'—':disp(s.disc)+'%'} <small>discount</small></div>
+    <div class="pc">$${disp(s.price_ct)} / ct</div>
+    <div class="tot">$${disp(askAmt)} total${s.rap?` &nbsp;·&nbsp; Rap $${disp(s.rap,0)}/ct`:''}</div>
+  </div>`);
+
+  /* your existing bid, if any */
+  const b=MYBIDS[s.id];
+  if(b){
+    cards.push(`<div class="mybid-card">
+      <h4>✓ Your bid on this stone</h4>
+      <div class="mybid-grid">
+        <div><span>Bid Disc%</span><b>${b.bid_disc==null?'—':disp(b.bid_disc)+'%'}</b></div>
+        <div><span>Bid $/Ct</span><b>$${disp(b.bid_per_ct)}</b></div>
+        <div><span>Bid Amount</span><b>$${disp(b.bid_amount)}</b></div>
+      </div>
+      <div class="when">Last updated ${esc(new Date(b.updated_at).toLocaleString('en-IN'))}</div>
+    </div>`);
+  }
+
+  cards.push(kvCard('Identity',[
+    ['Stone ID',s.stone_id],['Location',s.location||g('LOC.','LOC','LOCATION')],
+    ['Shape',s.shape],['Size Group',g('SIZE GROUP')],['Carats',disp(s.cts)],
+    ['Lab',s.lab],['Report No.',s.report_no?String(s.report_no).replace(/\.0$/,''):null],
+    ['DOR rough no',g('DOR rough no')]
+  ]));
+
+  cards.push(kvCard('Grading',[
+    ['Colour',s.color],['Clarity',s.clarity],
+    ['Cut · Polish · Symmetry',[s.cut,s.pol,s.symm].filter(Boolean).join(' · ')||null],
+    ['Fluorescence',s.fluor||g('FLUOR')],['Fluor. Colour',g('FLUORESCENCE COLOR')],
+    ['Luster',g('LUSTER')],['Shade',g('SHADE')],['Eye Clean',g('EYE CLEAN')]
+  ]));
+
+  cards.push(kvCard('Proportions',[
+    ['Measurements',meas||null],['L/W Ratio',disp(s.ratio)],
+    ['Total Depth %',disp(s.depth_pct)],['Table %',disp(s.table_pct)],
+    ['Crown Angle / Height',[g('CROWN ANGLE'),g('CROWN HEIGHT')].filter(v=>v!=null).map(v=>disp(v)).join(' / ')||null],
+    ['Pavilion Angle / Height',[g('PAVILION ANGLE'),g('PAVILION HEIGHT')].filter(v=>v!=null).map(v=>disp(v)).join(' / ')||null],
+    ['Girdle',g('GIRDLE')],['Girdle %',disp(g('GIRDLE %'))],
+    ['Star Length',disp(g('STAR LENGTH'))],['Lower Halves',disp(g('LOWER HALVES'))],
+    ['Culet',g('CULET')]
+  ]));
+
+  /* inclusions — only the ones actually present, as chips */
+  const incMap={
+    'TABLE BLACK INCLUSION':'Table black','TABLE WHITE INCLUSION':'Table white',
+    'SIDE BLACK INCLUSION':'Side black','SIDE WHITE INCLUSION':'Side white',
+    'TABLE SPOT INCLUSION':'Table spot','SIDE SPOT INCLUSION':'Side spot',
+    'TABLE OPEN INCLUSION':'Table open','CROWN OPEN INCLUSION':'Crown open',
+    'GIRDLE OPEN INCLUSION':'Girdle open','PAVILION OPEN INCLUSION':'Pavilion open',
+    'TABLE EXTRA FACET':'Table extra facet','CROWN EXTRA FACET':'Crown extra facet',
+    'PAVILION EXTRA FACET':'Pavilion extra facet','NATURAL':'Natural','GRAINING':'Graining'
+  };
+  const chips=Object.entries(incMap)
+    .filter(([k])=>D[k]!=null&&String(D[k]).trim()!==''&&String(D[k]).trim().toUpperCase()!=='NONE')
+    .map(([k,label])=>`<span class="chip warn">${esc(label)}: ${esc(D[k])}</span>`);
+  if(chips.length){
+    cards.push(`<div class="spec-card"><h4>Inclusion Detail</h4><div class="chips">${chips.join('')}</div></div>`);
+  }else{
+    cards.push(`<div class="spec-card"><h4>Inclusion Detail</h4><div class="chips"><span class="chip">No inclusions noted</span></div></div>`);
+  }
+
+  const kts=g('KEY TO SYMBOL'),cmt=g('REPORT COMMENTS');
+  if(kts||cmt){
+    cards.push(`<div class="spec-card"><h4>Report Notes</h4>
+      ${kts?`<div class="note-txt"><b>Key to symbols:</b> ${esc(kts)}</div>`:''}
+      ${cmt?`<div class="note-txt"><b>Comments:</b> ${esc(cmt)}</div>`:''}</div>`);
+  }
+
+  $('dSpecs').innerHTML=cards.filter(Boolean).join('');
+  $('dBidBtn').textContent=b?'Revise Bid':'Add Bid';
+  $('dBidBtn').onclick=()=>{closeDetail();openBidModal([s])};
+  $('dBidBtn').style.display=isOpen()?'':'none';
+  $('detailOverlay').classList.remove('hidden');
+}
+function closeDetail(){$('detailOverlay').classList.add('hidden');$('dMedia').innerHTML='';D_MEDIA=[]}
+
+/* ---------- boot ---------- */
+(async()=>{
+  try{
+    const j=await api('/api/me');
+    if(j.client){ME=j.client;enterApp()}
+  }catch(e){}
+})();
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){closeBid();closeDetail()}
+  if(e.key==='Enter'&&!$('loginView').classList.contains('hidden'))doLogin();
+});
+</script>
+</body>
+</html>

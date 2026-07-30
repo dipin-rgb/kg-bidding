@@ -344,14 +344,20 @@ function otpMatches(code, stored) {
     return crypto.timingSafeEqual(Buffer.from(hashOtp(code), 'hex'), Buffer.from(stored, 'hex'));
   } catch (e) { return false; }
 }
+/* Email clients cannot render inline SVG, so the real logo is served as a PNG
+   from the portal itself. Images are often blocked, so the alt text carries
+   the name and the tagline stays as live text underneath. */
+const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://bidding.kgirdharlal.com').replace(/\/+$/, '');
+const emailLogo = () =>
+  `<img src="${PUBLIC_URL}/logo.png" width="210" alt="K.GIRDHARLAL" ` +
+  `style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;height:auto;max-width:210px">`;
+
 function otpEmailHtml(code, isNew) {
   return `<div style="margin:0;padding:28px 12px;background:#eef4f7;font-family:'Segoe UI',Arial,sans-serif">
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #dbe6ea;border-radius:14px">
 <tr><td style="padding:26px 30px 6px;text-align:center;border-bottom:1px solid #eef4f6">
-  <div style="font-size:19px;letter-spacing:5px;color:#1d2b35;font-weight:600">K.GIRDHARLAL</div>
-  <div style="height:2px;background:#10A6C2;margin:7px auto 6px;max-width:240px"></div>
-  <div style="font-size:8.5px;letter-spacing:2.4px;color:#6b7d88">THERE'S MORE TO MAKING DIAMONDS</div>
-  <div style="font-size:11px;letter-spacing:2.6px;color:#0a7488;margin:14px 0 18px">BIDDING PORTAL</div>
+  ${emailLogo()}
+  <div style="font-size:11px;letter-spacing:2.6px;color:#0a7488;margin:16px 0 18px">BIDDING PORTAL</div>
 </td></tr>
 <tr><td style="padding:26px 30px 8px;color:#1d2b35;font-size:15px;line-height:1.6">
   <p style="margin:0 0 14px">${isNew
@@ -468,13 +474,18 @@ app.post('/api/client-login', async (req, res) => {
         rolling ? prev.sent_count + 1 : 1,
         rolling ? prev.first_sent_at : now, now, payload);
 
-  try {
-    await sendMail(contact, 'Your K.Girdharlal verification code: ' + code, otpEmailHtml(code, !client));
-  } catch (e) {
-    db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
-    return res.status(502).json({ error: 'We could not send the verification email. Please check the address and try again, or contact K.Girdharlal.' });
-  }
+  /* Answer the browser straight away so the code-entry screen appears instantly,
+     then hand the message to the mail server in the background. Waiting on SMTP
+     added a two-to-three second stall on the password screen. */
   res.json({ otp_required: true, contact, is_new: !client, expires_in: Math.floor(OTP_TTL_MS / 1000) });
+
+  sendMail(contact, 'Your K.Girdharlal verification code: ' + code, otpEmailHtml(code, !client))
+    .catch(e => {
+      /* Keep the row so "Send a new code" still works, and clear the 60s wait so
+         the client can retry at once — the retry reports the real error. */
+      db.prepare('UPDATE otps SET last_sent_at = 0 WHERE contact = ?').run(contact);
+      console.error('[otp] send failed for ' + contact + ' :: ' + (e && e.message));
+    });
 });
 
 /* ---------------- verify the emailed code ---------------- */
@@ -1078,9 +1089,10 @@ function bidEmailHtml(clientName, evName, terms, rows, total) {
     '<td style="padding:8px 10px;border-bottom:1px solid #e3eaee;text-align:right;font-weight:700">$' + fmtN(r.bid_amount) + '</td>' +
     '</tr>').join('');
   return '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;color:#1b2437">' +
-    '<div style="background:#10A6C2;color:#fff;padding:18px 24px;border-radius:12px 12px 0 0">' +
-    '<div style="font-size:18px;font-weight:700;letter-spacing:2px">K.GIRDHARLAL</div>' +
-    '<div style="font-size:12px;opacity:.9">THERE\'S MORE TO MAKING DIAMONDS</div></div>' +
+    '<div style="background:#fff;border:1px solid #dbe6ea;border-bottom:none;padding:24px;border-radius:12px 12px 0 0;text-align:center">' +
+    emailLogo() +
+    '<div style="font-size:11px;letter-spacing:2.6px;color:#0a7488;margin-top:14px">BIDDING PORTAL</div></div>' +
+    '<div style="height:2px;background:#10A6C2"></div>' +
     '<div style="border:1px solid #e3eaee;border-top:none;padding:24px;border-radius:0 0 12px 12px">' +
     '<p>Dear ' + clientName + ',</p>' +
     '<p>Thank you for participating in <b>' + evName + '</b>. Below is a summary of the bids you placed:</p>' +

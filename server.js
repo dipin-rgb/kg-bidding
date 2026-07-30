@@ -80,6 +80,20 @@ CREATE TABLE IF NOT EXISTS bids (
 `);
 try { db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT'); } catch (e) { /* column already exists */ }
 try { db.exec('ALTER TABLE events ADD COLUMN headers_json TEXT'); } catch (e) { /* column already exists */ }
+/* email verification: existing rows default to 0, so they verify once on next login */
+try { db.exec('ALTER TABLE clients ADD COLUMN email_verified INTEGER DEFAULT 0'); } catch (e) { /* exists */ }
+db.exec(`
+CREATE TABLE IF NOT EXISTS otps (
+  contact TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  sent_count INTEGER NOT NULL DEFAULT 1,
+  first_sent_at INTEGER NOT NULL,
+  last_sent_at INTEGER NOT NULL,
+  payload TEXT
+);
+`);
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -149,46 +163,406 @@ function verifyPw(pw, stored) {
 }
 const round2 = n => Math.round(n * 100) / 100;
 
+/* ---------------- email one-time passcodes ---------------- */
+const OTP_TTL_MS      = 10 * 60 * 1000;  /* code valid for 10 minutes */
+const OTP_MAX_TRIES   = 5;               /* wrong guesses before the code dies */
+const OTP_RESEND_WAIT = 60 * 1000;       /* 60s between sends */
+const OTP_MAX_SENDS   = 5;               /* per hour, per address */
+const OTP_SEND_WINDOW = 60 * 60 * 1000;
+
+/* ---------------- outbound mail: SMTP, Mailgun or Resend ----------------
+   Whichever is configured is used automatically, in this order.
+
+   SMTP   :  SMTP_USER, SMTP_PASS  (+ optional SMTP_HOST, SMTP_PORT)
+             For Google Workspace / Gmail use an App Password, not the
+             account password. Defaults suit Gmail: smtp.gmail.com:465.
+   Mailgun:  MAILGUN_API_KEY, MAILGUN_DOMAIN, MAILGUN_REGION ('eu' for EU accounts)
+   Resend :  RESEND_API_KEY
+   All    :  FROM_EMAIL  e.g.  K.Girdharlal Bidding <bidding@kgirdharlal.com>
+*/
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = (process.env.SMTP_PASS || '').replace(/\s+/g, ''); /* Google shows the App Password in 4 spaced blocks */
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+let smtpTransport = null;
+function getSmtp() {
+  if (!smtpTransport) {
+    const nodemailer = require('nodemailer');
+    smtpTransport = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,           /* 465 = implicit TLS, 587 = STARTTLS */
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      pool: true, maxConnections: 2, maxMessages: 50,
+      connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000
+    });
+  }
+  return smtpTransport;
+}
+const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
+const MAILGUN_DOMAIN  = process.env.MAILGUN_DOMAIN || '';
+const MAILGUN_REGION  = (process.env.MAILGUN_REGION || '').trim().toLowerCase();
+const MAILGUN_BASE    = process.env.MAILGUN_API_BASE ||
+  (MAILGUN_REGION === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net');
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_API_URL = process.env.RESEND_API_URL || 'https://api.resend.com/emails';
+
+const FROM_EMAIL = process.env.FROM_EMAIL ||
+  (SMTP_USER ? 'K.Girdharlal Bidding <' + SMTP_USER + '>'
+   : MAILGUN_DOMAIN ? 'K.Girdharlal Bidding <bidding@' + MAILGUN_DOMAIN + '>'
+                    : 'K.Girdharlal Bidding <onboarding@resend.dev>');
+/* Optional: mail goes out from a noreply address, but replies land somewhere real. */
+const REPLY_TO = (process.env.REPLY_TO || '').trim();
+/* pull the bare address out of  Name <addr@host>  */
+const bareAddr = s => {
+  const m = /<([^>]+)>/.exec(String(s || ''));
+  return (m ? m[1] : String(s || '')).trim().toLowerCase();
+};
+
+const mailProvider = () =>
+  (SMTP_USER && SMTP_PASS) ? 'smtp'
+  : (MAILGUN_API_KEY && MAILGUN_DOMAIN) ? 'mailgun'
+  : (RESEND_API_KEY ? 'resend' : null);
+const mailReady = () => !!mailProvider();
+
+/* ---------------- daily send cap ----------------
+   Safety limit while testing. Set MAIL_DAILY_CAP in Render to any number;
+   leave it out (or set 0) for no limit. Counted per India-time day. */
+const MAIL_DAILY_CAP = Math.max(0, Number(process.env.MAIL_DAILY_CAP || 0) || 0);
+db.exec('CREATE TABLE IF NOT EXISTS mail_usage (day TEXT PRIMARY KEY, sent INTEGER NOT NULL DEFAULT 0)');
+const istDay = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+function mailSentToday() {
+  const r = db.prepare('SELECT sent FROM mail_usage WHERE day = ?').get(istDay());
+  return r ? r.sent : 0;
+}
+function noteMailSent() {
+  db.prepare('INSERT INTO mail_usage (day, sent) VALUES (?,1) ' +
+             'ON CONFLICT(day) DO UPDATE SET sent = sent + 1').run(istDay());
+}
+function mailUsage() {
+  return { sent_today: mailSentToday(), daily_cap: MAIL_DAILY_CAP || null,
+           remaining: MAIL_DAILY_CAP ? Math.max(0, MAIL_DAILY_CAP - mailSentToday()) : null };
+}
+
+async function sendMail(to, subject, html) {
+  const provider = mailProvider();
+  if (!provider) throw new Error('Email service is not configured.');
+
+  if (MAIL_DAILY_CAP && mailSentToday() >= MAIL_DAILY_CAP) {
+    throw new Error('Daily email limit reached (' + MAIL_DAILY_CAP + ' for today). ' +
+      'Raise or remove MAIL_DAILY_CAP in Render → Environment to send more.');
+  }
+
+  /* ---- SMTP (Google Workspace / Microsoft 365 / any mail host) ---- */
+  if (provider === 'smtp') {
+    try {
+      const msg = { from: FROM_EMAIL, to, subject, html };
+      if (REPLY_TO) msg.replyTo = REPLY_TO;
+      await getSmtp().sendMail(msg);
+      noteMailSent();
+      return true;
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      let hint = '';
+      if (/Invalid login|Username and Password not accepted|535|534/i.test(msg)) {
+        hint = ' Check SMTP_USER and SMTP_PASS. For Gmail you must use a 16-character App Password ' +
+               '(not your normal password), and 2-Step Verification has to be switched on for that account.';
+      } else if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|timeout/i.test(msg)) {
+        hint = ' Could not reach ' + SMTP_HOST + ':' + SMTP_PORT + '. Try SMTP_PORT=587 if 465 is blocked.';
+      } else if (/5\.7\.0|not allowed|Sender address rejected|553|554/i.test(msg)) {
+        hint = ' The mail host would not accept this sender. FROM_EMAIL should normally be the same address as SMTP_USER.';
+      }
+      console.error('[mail] smtp ' + SMTP_HOST + ':' + SMTP_PORT + ' :: ' + msg.slice(0, 300));
+      throw new Error('Mail server rejected the message.' + hint);
+    }
+  }
+
+  let r, where;
+  if (provider === 'mailgun') {
+    where = MAILGUN_BASE + '/v3/' + MAILGUN_DOMAIN + '/messages';
+    const form = new URLSearchParams();
+    form.set('from', FROM_EMAIL);
+    form.set('to', to);
+    form.set('subject', subject);
+    form.set('html', html);
+    if (REPLY_TO) form.set('h:Reply-To', REPLY_TO);
+    r = await fetch(where, {
+      method: 'POST',
+      headers: {
+        /* Mailgun uses HTTP Basic auth with the literal username "api" */
+        'Authorization': 'Basic ' + Buffer.from('api:' + MAILGUN_API_KEY).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: form.toString()
+    });
+  } else {
+    where = RESEND_API_URL;
+    r = await fetch(where, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ from: FROM_EMAIL, to: [to], subject, html },
+        REPLY_TO ? { reply_to: REPLY_TO } : {}))
+    });
+  }
+
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    /* translate the failures that actually happen in setup into plain English */
+    let hint = '';
+    if (r.status === 401) {
+      hint = provider === 'mailgun'
+        ? ' Check MAILGUN_API_KEY. If your Mailgun account is on the EU region, also set MAILGUN_REGION=eu.'
+        : ' Check RESEND_API_KEY.';
+    } else if (r.status === 404 && provider === 'mailgun') {
+      hint = ' Mailgun does not recognise MAILGUN_DOMAIN (' + MAILGUN_DOMAIN + ') on this region.' +
+             ' Confirm the domain in Mailgun and whether the account is US or EU.';
+    } else if (r.status === 403) {
+      hint = ' The sender address may not be authorised for this domain — check FROM_EMAIL.';
+    }
+    console.error('[mail] ' + provider + ' ' + r.status + ' ' + where + ' :: ' + body.slice(0, 300));
+    throw new Error('Mail provider rejected the message (' + r.status + ').' + hint);
+  }
+  noteMailSent();
+  return true;
+}
+
+/* ---------------- OTP master switch ----------------
+   Set OTP_ENABLED=false in Render to sign in the old way, with no codes at all.
+   Use that while getting email working, then switch it on. Nobody gets locked
+   out in the meantime, and the admin Test Email button still works either way. */
+const OTP_ENABLED = !/^(false|0|no|off)$/i.test(String(process.env.OTP_ENABLED || 'true').trim());
+
+const isEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
+function makeOtp() {
+  /* 6 digits, uniform, no modulo bias */
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+const hashOtp = code => crypto.createHmac('sha256', SECRET).update('otp:' + code).digest('hex');
+function otpMatches(code, stored) {
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hashOtp(code), 'hex'), Buffer.from(stored, 'hex'));
+  } catch (e) { return false; }
+}
+function otpEmailHtml(code, isNew) {
+  return `<div style="margin:0;padding:28px 12px;background:#eef4f7;font-family:'Segoe UI',Arial,sans-serif">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #dbe6ea;border-radius:14px">
+<tr><td style="padding:26px 30px 6px;text-align:center;border-bottom:1px solid #eef4f6">
+  <div style="font-size:19px;letter-spacing:5px;color:#1d2b35;font-weight:600">K.GIRDHARLAL</div>
+  <div style="height:2px;background:#10A6C2;margin:7px auto 6px;max-width:240px"></div>
+  <div style="font-size:8.5px;letter-spacing:2.4px;color:#6b7d88">THERE'S MORE TO MAKING DIAMONDS</div>
+  <div style="font-size:11px;letter-spacing:2.6px;color:#0a7488;margin:14px 0 18px">BIDDING PORTAL</div>
+</td></tr>
+<tr><td style="padding:26px 30px 8px;color:#1d2b35;font-size:15px;line-height:1.6">
+  <p style="margin:0 0 14px">${isNew
+    ? 'Use the code below to confirm your email address and finish creating your bidding account.'
+    : 'Use the code below to confirm your email address and sign in.'}</p>
+</td></tr>
+<tr><td style="padding:4px 30px 10px;text-align:center">
+  <div style="display:inline-block;background:#eef9fc;border:1px solid #b9dde8;border-radius:12px;padding:16px 30px">
+    <div style="font-size:34px;letter-spacing:11px;font-weight:700;color:#075f72;font-family:Consolas,monospace">${code}</div>
+  </div>
+</td></tr>
+<tr><td style="padding:12px 30px 26px;color:#5a6f7c;font-size:13px;line-height:1.65">
+  <p style="margin:0 0 8px">This code expires in <b>10 minutes</b> and can be used once.</p>
+  <p style="margin:0">If you didn't try to sign in, you can ignore this email — no account or bid has been created.</p>
+</td></tr>
+<tr><td style="padding:14px 30px;border-top:1px solid #eef4f6;color:#8a9aa4;font-size:11.5px;text-align:center">
+  © ${new Date().getFullYear()} K.Girdharlal &amp; Co. · This is an automated message.
+</td></tr>
+</table></div>`;
+}
+
 /* ---------------- client auth ---------------- */
-app.post('/api/client-login', (req, res) => {
+app.post('/api/client-login', async (req, res) => {
   let { name, company, contact, password } = req.body || {};
-  name = (name || '').trim();
-  company = (company || '').trim();
-  contact = (contact || '').trim().toLowerCase();
+  name = (name || '').trim().slice(0, 120);
+  company = (company || '').trim().slice(0, 160);
+  contact = (contact || '').trim().toLowerCase().slice(0, 160);
   password = String(password || '');
   if (!name || !company || !contact) return res.status(400).json({ error: 'Name, company and email/mobile are all required.' });
   if (contact.length < 5) return res.status(400).json({ error: 'Please enter a valid email or mobile number.' });
+  if (password.length > 200) return res.status(400).json({ error: 'Password is too long.' });
   if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
 
+  const client = db.prepare('SELECT * FROM clients WHERE contact = ?').get(contact);
+
+  /* ── OTP switched off: behave exactly as before codes existed ── */
+  if (!OTP_ENABLED) {
+    let c = client;
+    if (!c) {
+      const info = db.prepare('INSERT INTO clients (name, company, contact, created_at, password_hash, email_verified) VALUES (?,?,?,?,?,0)')
+        .run(name, company, contact, Date.now(), hashPw(password));
+      c = db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(info.lastInsertRowid));
+    } else if (!c.password_hash) {
+      db.prepare('UPDATE clients SET name = ?, company = ?, password_hash = ? WHERE id = ?')
+        .run(name, company, hashPw(password), c.id);
+      c = db.prepare('SELECT * FROM clients WHERE id = ?').get(c.id);
+    } else {
+      if (!verifyPw(password, c.password_hash)) {
+        return res.status(401).json({ error: 'Wrong password for this email. If you have forgotten it, contact K.Girdharlal to reset it.' });
+      }
+      db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, c.id);
+      c = db.prepare('SELECT * FROM clients WHERE id = ?').get(c.id);
+    }
+    delete c.password_hash;
+    setCookie(res, 'sid_c', makeToken('c', c.id));
+    return res.json({ client: c });
+  }
+
+  /* ── already verified: straight in, password must match ── */
+  if (client && client.email_verified) {
+    if (!client.password_hash) {
+      /* admin reset the password — adopt the one just entered */
+      db.prepare('UPDATE clients SET name = ?, company = ?, password_hash = ? WHERE id = ?')
+        .run(name, company, hashPw(password), client.id);
+    } else {
+      if (!verifyPw(password, client.password_hash)) {
+        return res.status(401).json({ error: 'Wrong password for this email. If you have forgotten it, contact K.Girdharlal to reset it.' });
+      }
+      db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, client.id);
+    }
+    const fresh = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
+    delete fresh.password_hash;
+    setCookie(res, 'sid_c', makeToken('c', fresh.id));
+    return res.json({ client: fresh });
+  }
+
+  /* ── not yet verified: an emailed code is required ── */
+  if (!isEmail(contact)) {
+    return res.status(400).json({
+      error: 'Please sign in with an email address — we send a verification code to confirm it. ' +
+             'If your account was set up with a mobile number, contact K.Girdharlal and we will verify it for you.'
+    });
+  }
+  /* for an existing unverified account, check the password before sending anything */
+  if (client && client.password_hash && !verifyPw(password, client.password_hash)) {
+    return res.status(401).json({ error: 'Wrong password for this email. If you have forgotten it, contact K.Girdharlal to reset it.' });
+  }
+  if (!mailReady()) {
+    return res.status(503).json({ error: 'Email verification is temporarily unavailable. Please contact K.Girdharlal.' });
+  }
+
+  const now = Date.now();
+  const prev = db.prepare('SELECT * FROM otps WHERE contact = ?').get(contact);
+  if (prev) {
+    if (now - prev.last_sent_at < OTP_RESEND_WAIT) {
+      const wait = Math.ceil((OTP_RESEND_WAIT - (now - prev.last_sent_at)) / 1000);
+      return res.status(429).json({ error: 'A code was just sent. Please wait ' + wait + ' seconds before requesting another.', otp_required: true, contact });
+    }
+    if (now - prev.first_sent_at < OTP_SEND_WINDOW && prev.sent_count >= OTP_MAX_SENDS) {
+      return res.status(429).json({ error: 'Too many codes requested for this email. Please try again in an hour, or contact K.Girdharlal.' });
+    }
+  }
+
+  const code = makeOtp();
+  const payload = JSON.stringify({ name, company, pw: hashPw(password) });
+  const rolling = prev && (now - prev.first_sent_at < OTP_SEND_WINDOW);
+  db.prepare(
+    'INSERT INTO otps (contact, code_hash, expires_at, attempts, sent_count, first_sent_at, last_sent_at, payload) ' +
+    'VALUES (?,?,?,0,?,?,?,?) ON CONFLICT(contact) DO UPDATE SET ' +
+    'code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, ' +
+    'sent_count = excluded.sent_count, first_sent_at = excluded.first_sent_at, ' +
+    'last_sent_at = excluded.last_sent_at, payload = excluded.payload'
+  ).run(contact, hashOtp(code), now + OTP_TTL_MS,
+        rolling ? prev.sent_count + 1 : 1,
+        rolling ? prev.first_sent_at : now, now, payload);
+
+  try {
+    await sendMail(contact, 'Your K.Girdharlal verification code: ' + code, otpEmailHtml(code, !client));
+  } catch (e) {
+    db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
+    return res.status(502).json({ error: 'We could not send the verification email. Please check the address and try again, or contact K.Girdharlal.' });
+  }
+  res.json({ otp_required: true, contact, is_new: !client, expires_in: Math.floor(OTP_TTL_MS / 1000) });
+});
+
+/* ---------------- verify the emailed code ---------------- */
+app.post('/api/verify-otp', (req, res) => {
+  const contact = String((req.body || {}).contact || '').trim().toLowerCase().slice(0, 160);
+  const code = String((req.body || {}).code || '').replace(/\D/g, '');
+  if (!contact || code.length !== 6) return res.status(400).json({ error: 'Please enter the 6-digit code from your email.' });
+
+  const row = db.prepare('SELECT * FROM otps WHERE contact = ?').get(contact);
+  if (!row) return res.status(400).json({ error: 'That code has expired. Please request a new one.' });
+  if (Date.now() > row.expires_at) {
+    db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
+    return res.status(400).json({ error: 'That code has expired. Please request a new one.' });
+  }
+  if (row.attempts >= OTP_MAX_TRIES) {
+    db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
+    return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+  }
+  if (!otpMatches(code, row.code_hash)) {
+    const used = row.attempts + 1;
+    const left = OTP_MAX_TRIES - used;
+    if (left <= 0) {
+      /* burn the code immediately rather than leaving a dead row behind */
+      db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
+      return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+    }
+    db.prepare('UPDATE otps SET attempts = ? WHERE contact = ?').run(used, contact);
+    return res.status(401).json({
+      error: 'That code is not correct. ' + left + ' attempt' + (left === 1 ? '' : 's') + ' remaining.'
+    });
+  }
+
+  let p = {};
+  try { p = JSON.parse(row.payload || '{}'); } catch (e) { p = {}; }
   let client = db.prepare('SELECT * FROM clients WHERE contact = ?').get(contact);
   if (!client) {
-    /* first visit: account is created with this password */
-    const info = db.prepare('INSERT INTO clients (name, company, contact, created_at, password_hash) VALUES (?,?,?,?,?)')
-      .run(name, company, contact, Date.now(), hashPw(password));
+    /* the account is created only now, once the address is proven */
+    const info = db.prepare(
+      'INSERT INTO clients (name, company, contact, created_at, password_hash, email_verified) VALUES (?,?,?,?,?,1)'
+    ).run(p.name || '', p.company || '', contact, Date.now(), p.pw || null);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(info.lastInsertRowid));
-  } else if (!client.password_hash) {
-    /* existing account from before passwords existed (or admin reset): adopt this password */
-    db.prepare('UPDATE clients SET name = ?, company = ?, password_hash = ? WHERE id = ?')
-      .run(name, company, hashPw(password), client.id);
-    client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   } else {
-    if (!verifyPw(password, client.password_hash)) {
-      return res.status(401).json({ error: 'Wrong password for this email/mobile. If you forgot it, contact K.Girdharlal to reset.' });
-    }
-    db.prepare('UPDATE clients SET name = ?, company = ? WHERE id = ?').run(name, company, client.id);
+    db.prepare('UPDATE clients SET name = ?, company = ?, password_hash = COALESCE(?, password_hash), email_verified = 1 WHERE id = ?')
+      .run(p.name || client.name, p.company || client.company, p.pw || null, client.id);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
   }
+  db.prepare('DELETE FROM otps WHERE contact = ?').run(contact);
   delete client.password_hash;
   setCookie(res, 'sid_c', makeToken('c', client.id));
   res.json({ client });
 });
 
+/* ---------------- send a fresh code ---------------- */
+app.post('/api/resend-otp', async (req, res) => {
+  const contact = String((req.body || {}).contact || '').trim().toLowerCase().slice(0, 160);
+  if (!isEmail(contact)) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  const row = db.prepare('SELECT * FROM otps WHERE contact = ?').get(contact);
+  if (!row) return res.status(400).json({ error: 'Please start again from the sign-in form.' });
+  if (!mailReady()) return res.status(503).json({ error: 'Email verification is temporarily unavailable. Please contact K.Girdharlal.' });
+
+  const now = Date.now();
+  if (now - row.last_sent_at < OTP_RESEND_WAIT) {
+    const wait = Math.ceil((OTP_RESEND_WAIT - (now - row.last_sent_at)) / 1000);
+    return res.status(429).json({ error: 'Please wait ' + wait + ' more second' + (wait === 1 ? '' : 's') + ' before requesting another code.' });
+  }
+  const rolling = now - row.first_sent_at < OTP_SEND_WINDOW;
+  if (rolling && row.sent_count >= OTP_MAX_SENDS) {
+    return res.status(429).json({ error: 'Too many codes requested for this email. Please try again in an hour, or contact K.Girdharlal.' });
+  }
+  const code = makeOtp();
+  db.prepare('UPDATE otps SET code_hash = ?, expires_at = ?, attempts = 0, sent_count = ?, first_sent_at = ?, last_sent_at = ? WHERE contact = ?')
+    .run(hashOtp(code), now + OTP_TTL_MS, rolling ? row.sent_count + 1 : 1, rolling ? row.first_sent_at : now, now, contact);
+  const exists = db.prepare('SELECT id FROM clients WHERE contact = ?').get(contact);
+  try {
+    await sendMail(contact, 'Your K.Girdharlal verification code: ' + code, otpEmailHtml(code, !exists));
+  } catch (e) {
+    return res.status(502).json({ error: 'We could not send the verification email. Please try again shortly.' });
+  }
+  res.json({ ok: true, expires_in: Math.floor(OTP_TTL_MS / 1000) });
+});
+
 app.get('/api/me', (req, res) => {
   const s = getSession(req);
-  if (!s) return res.json({ client: null, admin: false });
+  /* otp_enabled must be present even with no session — the login page reads it */
+  if (!s) return res.json({ client: null, admin: false, otp_enabled: OTP_ENABLED });
   const client = s.client_id ? db.prepare('SELECT * FROM clients WHERE id = ?').get(s.client_id) : null;
   if (client) delete client.password_hash; /* never send the stored hash to the browser */
-  res.json({ client: client || null, admin: !!s.is_admin });
+  res.json({ client: client || null, admin: !!s.is_admin, otp_enabled: OTP_ENABLED });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -254,6 +628,13 @@ app.post('/api/bids', requireClient, (req, res) => {
         throw new Error('Bid on ' + stone.stone_id + ' is at ' + disc.toFixed(2) +
           '% discount, which is below the asking price. Maximum allowed discount is ' +
           Number(stone.disc).toFixed(2) + '%.');
+      }
+      /* Sanity ceiling — catches a mistyped extra digit. Twice the Rap rate is far
+         above any realistic bid, so anything beyond it is a typo, not an offer. */
+      if (stone.rap && stone.rap > 0 && perCt > stone.rap * 2) {
+        throw new Error('Bid of $' + round2(perCt).toLocaleString('en-US') + '/ct on ' +
+          stone.stone_id + ' looks like a typo — it is more than double the Rap rate of $' +
+          Number(stone.rap).toLocaleString('en-US') + '/ct. Please check the figure.');
       }
       const now = Date.now();
       upsert.run(ev.id, stone.id, req.client.id, disc, round2(perCt), amount, now, now);
@@ -371,6 +752,23 @@ function parseStocklist(buffer) {
     });
   }
   if (!stones.length) throw new Error('No valid stone rows found in the file.');
+
+  /* A repeated STONE ID would otherwise fail deep in the insert with a raw
+     "UNIQUE constraint failed" message. Catch it here and say which ones. */
+  const seenIds = new Map();
+  const dupes = [];
+  stones.forEach((s, i) => {
+    const key = s.stone_id.toUpperCase();
+    if (seenIds.has(key)) dupes.push(s.stone_id + ' (rows ' + (seenIds.get(key) + 2) + ' and ' + (i + 2) + ')');
+    else seenIds.set(key, i);
+  });
+  if (dupes.length) {
+    throw new Error('This file lists the same STONE ID more than once: ' +
+      dupes.slice(0, 5).join('; ') +
+      (dupes.length > 5 ? ' …and ' + (dupes.length - 5) + ' more' : '') +
+      '. Please remove the duplicate rows and upload again.');
+  }
+
   /* keep the source column order so downloads can reproduce the exact format,
      including columns that happen to be empty for every row */
   stones.sourceHeaders = headers.filter(h => h && String(h).trim() !== '');
@@ -464,6 +862,7 @@ app.get('/api/admin/clients', requireAdmin, (req, res) => {
   const clients = db.prepare(
     'SELECT c.id, c.name, c.company, c.contact, c.created_at, ' +
     'CASE WHEN c.password_hash IS NULL THEN 0 ELSE 1 END AS has_password, ' +
+    'COALESCE(c.email_verified, 0) AS email_verified, ' +
     '(SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids ' +
     'FROM clients c ORDER BY c.created_at DESC').all();
   res.json({ clients });
@@ -598,8 +997,69 @@ app.post('/api/admin/clients/:id/reset-password', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---------------- admin: check the email setup ----------------
+   Sends a real test message and reports exactly what the provider said,
+   so mail configuration can be diagnosed without reading server logs. */
+app.post('/api/admin/test-email', requireAdmin, async (req, res) => {
+  const to = String((req.body || {}).to || '').trim();
+  const provider = mailProvider();
+  const cfg = {
+    provider: provider || 'none',
+    otp_enabled: OTP_ENABLED,
+    from: FROM_EMAIL,
+    reply_to: REPLY_TO || null,
+    smtp_user: provider === 'smtp' ? SMTP_USER : null,
+    mailgun_domain: provider === 'mailgun' ? MAILGUN_DOMAIN : null,
+    mailgun_region: provider === 'mailgun' ? (MAILGUN_REGION === 'eu' ? 'eu' : 'us') : null,
+    endpoint: provider === 'smtp' ? SMTP_HOST + ':' + SMTP_PORT
+            : provider === 'mailgun' ? MAILGUN_BASE + '/v3/' + MAILGUN_DOMAIN + '/messages'
+            : provider === 'resend' ? RESEND_API_URL : null,
+    usage: mailUsage()
+  };
+  /* The usual trap: sending as an address the mail host does not own.
+     Gmail silently rewrites it, so the test can "pass" yet arrive from the wrong address. */
+  if (provider === 'smtp' && SMTP_USER && bareAddr(FROM_EMAIL) !== SMTP_USER.trim().toLowerCase()) {
+    cfg.warning = 'FROM_EMAIL (' + bareAddr(FROM_EMAIL) + ') is not the account being signed into (' +
+      SMTP_USER + '). This only works if that address is a verified alias or "Send mail as" identity ' +
+      'on the account — otherwise the mail host may reject it, or quietly replace it with ' + SMTP_USER +
+      '. Check what address the test message actually arrives from.';
+  }
+  if (!provider) {
+    return res.status(400).json({
+      ok: false, config: cfg,
+      error: 'No email provider is configured. Add SMTP_USER + SMTP_PASS (or MAILGUN_API_KEY + MAILGUN_DOMAIN, or RESEND_API_KEY) in Render → Environment.'
+    });
+  }
+  if (!isEmail(to)) return res.status(400).json({ ok: false, config: cfg, error: 'Enter a valid email address to send the test to.' });
+  try {
+    await sendMail(to, 'K.Girdharlal portal — email test',
+      '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#1d2b35">' +
+      '<p>This is a test message from your bidding portal.</p>' +
+      '<p>If you are reading this, verification codes will reach your clients correctly.</p>' +
+      '<p style="color:#5a6f7c;font-size:13px">Sent via ' + provider + ' · from ' + FROM_EMAIL + '</p></div>');
+    cfg.usage = mailUsage();
+    res.json({ ok: true, config: cfg, message: 'Test email accepted by ' + provider + '. Check the inbox for ' + to + '.' });
+  } catch (e) {
+    res.status(502).json({ ok: false, config: cfg, error: e.message });
+  }
+});
+
+/* ---------------- admin: verification override ----------------
+   Needed for clients whose account uses a mobile number and who therefore
+   cannot receive an email code, and for anyone stuck on delivery problems. */
+app.post('/api/admin/clients/:id/set-verified', requireAdmin, (req, res) => {
+  const v = (req.body || {}).verified ? 1 : 0;
+  const c = db.prepare('SELECT id, contact FROM clients WHERE id = ?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Client not found.' });
+  db.prepare('UPDATE clients SET email_verified = ? WHERE id = ?').run(v, c.id);
+  if (!v) db.prepare('DELETE FROM otps WHERE contact = ?').run(c.contact);
+  res.json({ ok: true, verified: v });
+});
+
 /* ---------------- admin: stones with no bids ---------------- */
 app.get('/api/admin/events/:id/nobids', requireAdmin, (req, res) => {
+  const exists = db.prepare('SELECT id FROM events WHERE id = ?').get(Number(req.params.id));
+  if (!exists) return res.status(404).json({ error: 'Event not found.' });
   const stones = db.prepare(
     'SELECT s.* FROM stones s WHERE s.event_id = ? AND NOT EXISTS ' +
     '(SELECT 1 FROM bids b WHERE b.stone_pk = s.id) ORDER BY s.cts DESC').all(Number(req.params.id));
@@ -607,8 +1067,6 @@ app.get('/api/admin/events/:id/nobids', requireAdmin, (req, res) => {
 });
 
 /* ---------------- admin: email each bidder their bid summary ---------------- */
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'K.Girdharlal Bidding <onboarding@resend.dev>';
 function bidEmailHtml(clientName, evName, terms, rows, total) {
   const fmtN = n => n == null ? '-' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const tr = rows.map(r =>
@@ -636,7 +1094,7 @@ function bidEmailHtml(clientName, evName, terms, rows, total) {
     '</div></div>';
 }
 app.post('/api/admin/events/:id/email-bids', requireAdmin, async (req, res) => {
-  if (!RESEND_API_KEY) return res.status(400).json({ error: 'Email service not configured yet. Add RESEND_API_KEY (and optionally FROM_EMAIL) in Render Environment.' });
+  if (!mailReady()) return res.status(400).json({ error: 'Email service is not configured yet. Add SMTP_USER + SMTP_PASS (or Mailgun / Resend keys) in Render → Environment, then use the Test Email button.' });
   const ev = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(req.params.id));
   if (!ev) return res.status(404).json({ error: 'Event not found.' });
   const clients = db.prepare(
@@ -644,26 +1102,23 @@ app.post('/api/admin/events/:id/email-bids', requireAdmin, async (req, res) => {
   const perClient = db.prepare(
     'SELECT b.*, s.stone_id, s.shape, s.cts, s.color, s.clarity FROM bids b JOIN stones s ON s.id = b.stone_pk ' +
     'WHERE b.event_id = ? AND b.client_id = ? ORDER BY s.cts DESC');
-  let sent = 0, skipped = 0, failed = 0;
+  let sent = 0, skipped = 0, failed = 0, lastError = '';
   for (const c of clients) {
     if (!c.contact || c.contact.indexOf('@') === -1) { skipped++; continue; }
     const rows = perClient.all(ev.id, c.id);
     const total = rows.reduce((a, r) => a + r.bid_amount, 0);
     try {
-      const r = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM_EMAIL,
-          to: [c.contact],
-          subject: 'Your bid summary - ' + ev.name + ' | K.Girdharlal',
-          html: bidEmailHtml(c.name, ev.name, ev.terms, rows, round2(total))
-        })
-      });
-      if (r.ok) sent++; else failed++;
-    } catch (e) { failed++; }
+      await sendMail(c.contact,
+        'Your bid summary - ' + ev.name + ' | K.Girdharlal',
+        bidEmailHtml(c.name, ev.name, ev.terms, rows, round2(total)));
+      sent++;
+    } catch (e) { failed++; lastError = e.message; }
   }
-  res.json({ ok: true, sent, skipped, failed, note: skipped ? skipped + ' bidder(s) registered with a mobile number instead of email and could not be emailed.' : undefined });
+  res.json({
+    ok: true, sent, skipped, failed,
+    note: skipped ? skipped + ' bidder(s) registered with a mobile number instead of email and could not be emailed.' : undefined,
+    error_detail: failed ? lastError : undefined
+  });
 });
 
 /* ---------------- client: download own bids as Excel ---------------- */

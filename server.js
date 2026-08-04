@@ -349,8 +349,8 @@ function otpMatches(code, stored) {
    the name and the tagline stays as live text underneath. */
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://bidding.kgirdharlal.com').replace(/\/+$/, '');
 const emailLogo = () =>
-  `<img src="${PUBLIC_URL}/logo.png" width="210" alt="K.GIRDHARLAL" ` +
-  `style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;height:auto;max-width:210px">`;
+  `<img src="${PUBLIC_URL}/logo.png" width="240" height="104" alt="K.GIRDHARLAL" ` +
+  `style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;width:240px;height:auto;max-width:240px">`;
 
 function otpEmailHtml(code, isNew) {
   return `<div style="margin:0;padding:28px 12px;background:#eef4f7;font-family:'Segoe UI',Arial,sans-serif">

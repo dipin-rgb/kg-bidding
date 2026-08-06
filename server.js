@@ -82,6 +82,11 @@ try { db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT'); } catch (e) 
 try { db.exec('ALTER TABLE events ADD COLUMN headers_json TEXT'); } catch (e) { /* column already exists */ }
 /* email verification: existing rows default to 0, so they verify once on next login */
 try { db.exec('ALTER TABLE clients ADD COLUMN email_verified INTEGER DEFAULT 0'); } catch (e) { /* exists */ }
+/* optional scheduled opening time — existing events are treated as already open */
+try {
+  db.exec('ALTER TABLE events ADD COLUMN start_time INTEGER');
+  db.exec('UPDATE events SET start_time = created_at WHERE start_time IS NULL');
+} catch (e) { /* exists */ }
 db.exec(`
 CREATE TABLE IF NOT EXISTS otps (
   contact TEXT PRIMARY KEY,
@@ -588,8 +593,21 @@ app.post('/api/logout', (req, res) => {
 function activeEvent() {
   return db.prepare("SELECT * FROM events WHERE status = 'live' ORDER BY created_at DESC LIMIT 1").get() || null;
 }
+/* An event may be scheduled to open later. Before that moment clients can browse
+   the stones but not bid; afterwards it behaves exactly as before. */
+function eventHasStarted(ev) {
+  return !!ev && (!ev.start_time || Date.now() >= ev.start_time);
+}
 function eventIsOpen(ev) {
-  return ev && ev.status === 'live' && Date.now() < ev.end_time;
+  return !!ev && ev.status === 'live' && eventHasStarted(ev) && Date.now() < ev.end_time;
+}
+function closedReason(ev) {
+  if (!ev || ev.status !== 'live') return 'Bidding is closed.';
+  if (!eventHasStarted(ev)) {
+    return 'Bidding has not opened yet. It opens on ' +
+      new Date(ev.start_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST.';
+  }
+  return 'Bidding is closed.';
 }
 
 app.get('/api/event', (req, res) => {
@@ -612,7 +630,7 @@ app.get('/api/my-bids', requireClient, (req, res) => {
 
 app.post('/api/bids', requireClient, (req, res) => {
   const ev = activeEvent();
-  if (!eventIsOpen(ev)) return res.status(400).json({ error: 'Bidding is closed.' });
+  if (!eventIsOpen(ev)) return res.status(400).json({ error: closedReason(ev) });
   const items = Array.isArray(req.body.bids) ? req.body.bids : [];
   if (!items.length) return res.status(400).json({ error: 'No bids submitted.' });
   const getStone = db.prepare('SELECT * FROM stones WHERE id = ? AND event_id = ?');
@@ -658,7 +676,7 @@ app.post('/api/bids', requireClient, (req, res) => {
 
 app.delete('/api/bids/:stonePk', requireClient, (req, res) => {
   const ev = activeEvent();
-  if (!eventIsOpen(ev)) return res.status(400).json({ error: 'Bidding is closed.' });
+  if (!eventIsOpen(ev)) return res.status(400).json({ error: closedReason(ev) });
   db.prepare('DELETE FROM bids WHERE event_id = ? AND stone_pk = ? AND client_id = ?')
     .run(ev.id, Number(req.params.stonePk), req.client.id);
   res.json({ ok: true });
@@ -791,8 +809,12 @@ app.post('/api/admin/events', requireAdmin, upload.single('file'), (req, res) =>
     const name = (req.body.name || '').trim();
     const terms = (req.body.terms || '').trim();
     const endTime = Number(req.body.end_time);
+    /* optional: leave blank to open immediately */
+    let startTime = Number(req.body.start_time);
+    if (!isFinite(startTime) || startTime <= 0) startTime = Date.now();
     if (!name) return res.status(400).json({ error: 'Event name is required.' });
     if (!isFinite(endTime) || endTime <= Date.now()) return res.status(400).json({ error: 'End time must be in the future.' });
+    if (startTime >= endTime) return res.status(400).json({ error: 'The opening time must be before the closing time.' });
     if (!req.file) return res.status(400).json({ error: 'Please attach the stocklist Excel file.' });
 
     const stones = parseStocklist(req.file.buffer);
@@ -803,8 +825,8 @@ app.post('/api/admin/events', requireAdmin, upload.single('file'), (req, res) =>
     );
     const tx = db.transaction(() => {
       db.exec("UPDATE events SET status = 'closed' WHERE status = 'live'");
-      const info = db.prepare("INSERT INTO events (name, terms, end_time, status, created_at, headers_json) VALUES (?,?,?,'live',?,?)")
-        .run(name, terms, endTime, Date.now(), JSON.stringify(stones.sourceHeaders || []));
+      const info = db.prepare("INSERT INTO events (name, terms, start_time, end_time, status, created_at, headers_json) VALUES (?,?,?,?,'live',?,?)")
+        .run(name, terms, startTime, endTime, Date.now(), JSON.stringify(stones.sourceHeaders || []));
       const evId = Number(info.lastInsertRowid);
       for (const s of stones) {
         ins.run(evId, s.stone_id, s.location, s.shape, s.cts, s.color, s.clarity, s.cut, s.pol, s.symm, s.fluor,
@@ -979,6 +1001,62 @@ app.get('/api/admin/events/:id/export-by-company', requireAdmin, async (req, res
   }
 
   const fname = 'BidsByCompany_' + ev.name.replace(/[^a-zA-Z0-9-_]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
+  await wb.xlsx.write(res);
+  res.end();
+});
+
+/* ---------------- admin: download the registered client list ---------------- */
+app.get('/api/admin/clients/export', requireAdmin, async (req, res) => {
+  const rows = db.prepare(
+    'SELECT c.id, c.name, c.company, c.contact, c.created_at, ' +
+    'COALESCE(c.email_verified,0) AS email_verified, ' +
+    'CASE WHEN c.password_hash IS NULL THEN 0 ELSE 1 END AS has_password, ' +
+    '(SELECT COUNT(*) FROM bids b WHERE b.client_id = c.id) AS total_bids, ' +
+    '(SELECT COUNT(DISTINCT b.event_id) FROM bids b WHERE b.client_id = c.id) AS events_taken_part, ' +
+    '(SELECT MAX(b.updated_at) FROM bids b WHERE b.client_id = c.id) AS last_bid_at, ' +
+    '(SELECT SUM(b.bid_amount) FROM bids b WHERE b.client_id = c.id) AS lifetime_bid_value ' +
+    'FROM clients c ORDER BY c.company COLLATE NOCASE, c.created_at DESC').all();
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'K.Girdharlal Bidding Portal';
+  const ws = wb.addWorksheet('Registered Clients');
+  const head = ['COMPANY', 'CONTACT PERSON', 'EMAIL / MOBILE', 'EMAIL VERIFIED', 'PASSWORD SET',
+                'REGISTERED ON', 'EVENTS PARTICIPATED', 'TOTAL BIDS', 'LIFETIME BID VALUE $', 'LAST BID'];
+  ws.columns = [{ width: 32 }, { width: 24 }, { width: 34 }, { width: 15 }, { width: 14 },
+                { width: 22 }, { width: 20 }, { width: 12 }, { width: 21 }, { width: 22 }];
+  ws.addRow(head);
+  const ist = t => t ? new Date(t).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+  for (const c of rows) {
+    ws.addRow([
+      c.company, c.name, c.contact,
+      c.email_verified ? 'Yes' : 'No',
+      c.has_password ? 'Yes' : 'No',
+      ist(c.created_at),
+      c.events_taken_part || 0,
+      c.total_bids || 0,
+      c.lifetime_bid_value ? round2(c.lifetime_bid_value) : 0,
+      ist(c.last_bid_at)
+    ]);
+  }
+  const verified = rows.filter(c => c.email_verified).length;
+  const tr = ws.addRow([`TOTAL — ${rows.length} client${rows.length === 1 ? '' : 's'}`,
+    '', `${verified} verified · ${rows.length - verified} pending`, '', '', '', '',
+    rows.reduce((a, c) => a + (c.total_bids || 0), 0),
+    round2(rows.reduce((a, c) => a + (c.lifetime_bid_value || 0), 0)), '']);
+  tr.font = { bold: true };
+  tr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F6FA' } };
+  styleHeader(ws, head.length);
+  /* highlight unverified rows so they are easy to spot */
+  rows.forEach((c, i) => {
+    if (!c.email_verified) {
+      ws.getRow(i + 2).getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDECEA' } };
+      ws.getRow(i + 2).getCell(4).font = { color: { argb: 'FFB3261E' }, bold: true };
+    }
+  });
+
+  const fname = 'KG_Registered_Clients_' + new Date().toISOString().slice(0, 10) + '.xlsx';
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
   await wb.xlsx.write(res);
